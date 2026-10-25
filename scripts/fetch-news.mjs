@@ -1,12 +1,11 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 
 const feeds = [
-  ['科技新闻', 'https://news.google.com/rss/search?q=科技+AI&hl=zh-CN&gl=CN&ceid=CN:zh-Hans', '产业与政策'],
-  ['人工智能', 'https://news.google.com/rss/search?q=人工智能+AI&hl=zh-CN&gl=CN&ceid=CN:zh-Hans', '人工智能'],
-  ['半导体', 'https://news.google.com/rss/search?q=半导体+芯片+AI&hl=zh-CN&gl=CN&ceid=CN:zh-Hans', '半导体'],
-  ['互联网', 'https://news.google.com/rss/search?q=互联网+科技+AI&hl=zh-CN&gl=CN&ceid=CN:zh-Hans', '互联网'],
-  ['网络安全', 'https://news.google.com/rss/search?q=AI+cybersecurity&hl=en-US&gl=US&ceid=US:en', '网络安全'],
-  ['国际科技', 'https://news.google.com/rss/search?q=artificial+intelligence+technology&hl=en-US&gl=US&ceid=US:en', '人工智能']
+  ['BBC 科技', 'https://feeds.bbci.co.uk/news/technology/rss.xml', '互联网'],
+  ['Ars Technica', 'https://feeds.arstechnica.com/arstechnica/index', '网络安全'],
+  ['The Verge', 'https://www.theverge.com/rss/index.xml', '互联网'],
+  ['OpenAI 官方动态', 'https://openai.com/news/rss.xml', '人工智能'],
+  ['NVIDIA 生成式 AI', 'https://nvidianews.nvidia.com/cats/generative_al.xml', '半导体']
 ];
 
 function decode(value = '') {
