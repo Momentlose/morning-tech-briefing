@@ -5,7 +5,9 @@ const feeds = [
   ['Ars Technica', 'https://feeds.arstechnica.com/arstechnica/index', '产业与政策'],
   ['The Verge', 'https://www.theverge.com/rss/index.xml', '互联网'],
   ['OpenAI 官方动态', 'https://openai.com/news/rss.xml', '人工智能'],
-  ['NVIDIA 生成式 AI', 'https://nvidianews.nvidia.com/cats/generative_al.xml', '半导体']
+  ['NVIDIA 生成式 AI', 'https://nvidianews.nvidia.com/cats/generative_al.xml', '半导体'],
+  ['机器之心', 'https://www.jiqizhixin.com/rss', '人工智能'],
+  ['量子位', 'https://www.qbitai.com/feed', '人工智能']
 ];
 
 function decode(value = '') {
