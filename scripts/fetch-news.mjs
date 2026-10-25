@@ -28,7 +28,7 @@ function categoryFor(title, summary, fallback) {
   if (/\bcyber[- ]?security\b|\bvulnerabilit(y|ies)\b|\bransomware\b|\bphishing\b|\bhack(ing|er|ers)?\b|\bmalware\b|\bdata breach\b|\bexploit\b|漏洞|网络安全|勒索|网络攻击|黑客|数据泄露/.test(text)) return '网络安全';
   if (/\bsemiconductor(s)?\b|\bchips?\b|\bgpu(s)?\b|\bprocessors?\b|\bmemory\b|\bsilicon\b|\bnvidia\b|\bintel\b|\bamd\b|\btsmc\b|半导体|芯片|显卡|存储/.test(text)) return '半导体';
   if (/artificial intelligence|\bai\b|\bopenai\b|\banthropic\b|\bchatgpt\b|\bgpt\b|\bllm\b|\bdeepmind\b|人工智能|大模型|智能体/.test(text)) return '人工智能';
-  return fallback;
+  return '其他科技';
 }
 function textOnly(html) {
   return decode(html).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
@@ -56,6 +56,11 @@ function impactFor(item) {
       positive: '若产品带来用户增长或广告、订阅、云业务变现，相关平台可能受益。',
       negative: '竞争、监管、内容治理和获客投入可能增加成本并影响增长质量。',
       watch: '关注用户留存、付费转化、广告或云收入、费用率及监管变化。'
+    },
+    '其他科技': {
+      positive: '这条报道偏一般科技或基础研究，短期未必能直接转化为公司收入；若后续出现商业化、采购或量产，相关供应链才可能受益。',
+      negative: '仅凭标题和摘要看不出对具体公司盈利的明确方向，不宜据此判断短期利空。',
+      watch: '确认是否有明确企业参与、商业化路径、项目采购或量产时间表。'
     },
     '产业与政策': {
       positive: '若政策支持或投资落到具体项目，相关行业与供应链可能获得订单或资金支持。',
