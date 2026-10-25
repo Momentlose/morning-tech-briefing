@@ -2,7 +2,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 
 const feeds = [
   ['BBC 科技', 'https://feeds.bbci.co.uk/news/technology/rss.xml', '互联网'],
-  ['Ars Technica', 'https://feeds.arstechnica.com/arstechnica/index', '网络安全'],
+  ['Ars Technica', 'https://feeds.arstechnica.com/arstechnica/index', '产业与政策'],
   ['The Verge', 'https://www.theverge.com/rss/index.xml', '互联网'],
   ['OpenAI 官方动态', 'https://openai.com/news/rss.xml', '人工智能'],
   ['NVIDIA 生成式 AI', 'https://nvidianews.nvidia.com/cats/generative_al.xml', '半导体']
@@ -20,6 +20,14 @@ function field(xml, name) {
   const match = xml.match(new RegExp('<' + name + '\\b[^>]*>([\\s\\S]*?)</' + name + '>', 'i'));
   return match ? decode(match[1]).trim() : '';
 }
+function categoryFor(title, summary, fallback) {
+  const text = (title + ' ' + summary).toLowerCase();
+  if (/cyber|security|vulnerabilit|ransom|phishing|hack|malware|breach|exploit|漏洞|安全|攻击|勒索|黑客/.test(text)) return '网络安全';
+  if (/semiconductor|chip|gpu|processor|memory|silicon|nvidia|intel|amd|tsmc|半导体|芯片|显卡|存储/.test(text)) return '半导体';
+  if (/artificial intelligence|\\bai\\b|openai|anthropic|chatgpt|gpt|llm|model|agent|deepmind|人工智能|大模型|智能体/.test(text)) return '人工智能';
+  if (/regulat|government|policy|law|court|funding|investment|company|market|政府|政策|监管|融资|投资|企业|市场/.test(text)) return '产业与政策';
+  return fallback === '网络安全' ? '产业与政策' : fallback;
+}
 function textOnly(html) {
   return decode(html).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 }
@@ -34,7 +42,7 @@ async function fetchFeed([label, url, cat]) {
     const source = textOnly(field(item, 'source')) || label;
     const summary = textOnly(field(item, 'description')).slice(0, 220);
     if (!title || !link || !date) return null;
-    return { title, link, date, source, summary, cat };
+    return { title, link, date, source, summary, cat: categoryFor(title, summary, cat) };
   }).filter(Boolean);
 }
 
