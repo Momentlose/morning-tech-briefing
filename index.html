@@ -71,7 +71,7 @@ function revealNearViewport(){
   const limit=window.innerHeight+140;
   document.querySelectorAll('.reveal-target:not(.is-visible)').forEach(el=>{
     const rect=el.getBoundingClientRect();
-    if(rect.top<limit&&rect.bottom>-100)el.classList.add('is-visible');
+    if(rect.top<limit)el.classList.add('is-visible');
   });
 }
 let progressQueued=false;
