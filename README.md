@@ -4,7 +4,7 @@
 
 ## 功能
 
-- 汇总 BBC、Ars Technica、The Verge、OpenAI 和 NVIDIA 的公开 RSS 动态。
+- 汇总 BBC、Ars Technica、The Verge、OpenAI、NVIDIA 和量子位的公开 RSS 动态。
 - GitHub Actions 每天 06:30（北京时间）抓取新闻并发布；也可以在 Actions 页面手动运行。
 - 页面打开时读取当天新闻，可按主题筛选；资讯标题链接回原文。
 - 含基金研究检查清单；内容用于信息参考，不构成投资建议。
