@@ -24,7 +24,7 @@ function categoryFor(title, summary, fallback) {
   const text = (title + ' ' + summary).toLowerCase();
   if (/cyber|security|vulnerabilit|ransom|phishing|hack|malware|breach|exploit|漏洞|安全|攻击|勒索|黑客/.test(text)) return '网络安全';
   if (/semiconductor|chip|gpu|processor|memory|silicon|nvidia|intel|amd|tsmc|半导体|芯片|显卡|存储/.test(text)) return '半导体';
-  if (/artificial intelligence|\\bai\\b|openai|anthropic|chatgpt|gpt|llm|model|agent|deepmind|人工智能|大模型|智能体/.test(text)) return '人工智能';
+  if (/artificial intelligence|\bai\b|openai|anthropic|chatgpt|gpt|llm|model|agent|deepmind|人工智能|大模型|智能体/.test(text)) return '人工智能';
   if (/regulat|government|policy|law|court|funding|investment|company|market|政府|政策|监管|融资|投资|企业|市场/.test(text)) return '产业与政策';
   return fallback === '网络安全' ? '产业与政策' : fallback;
 }
