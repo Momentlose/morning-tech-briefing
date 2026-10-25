@@ -18,17 +18,17 @@ function decode(value = '') {
     .replace(/&#x([\da-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)));
 }
 function field(xml, name) {
-  const match = xml.match(new RegExp('<' + name + '\\b[^>]*>([\\s\\S]*?)<\\/' + name + '>','i'));
+  const match = xml.match(new RegExp('<' + name + '\\b[^>]*>([\\s\\S]*?)</' + name + '>', 'i'));
   return match ? decode(match[1]).trim() : '';
 }
 function textOnly(html) {
-  return decode(html).replace(/<[^>]+>/g, ' ').replace(/\\s+/g, ' ').trim();
+  return decode(html).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 }
 async function fetchFeed([label, url, cat]) {
   const response = await fetch(url, { signal: AbortSignal.timeout(20000), headers: { 'user-agent': 'MorningTechBriefing/1.0 (RSS reader)' } });
   if (!response.ok) throw new Error(label + ': HTTP ' + response.status);
   const xml = await response.text();
-  return [...xml.matchAll(/<item\\b[\\s\\S]*?<\\/item>/gi)].map(([item]) => {
+  return [...xml.matchAll(/<item\b[\s\S]*?<\/item>/gi)].map(([item]) => {
     const title = textOnly(field(item, 'title'));
     const link = field(item, 'link');
     const date = field(item, 'pubDate');
@@ -59,5 +59,5 @@ for (const result of results) {
 stories.sort((a, b) => Date.parse(b.date) - Date.parse(a.date));
 if (!stories.length) throw new Error('No recent stories were returned by the RSS sources.');
 await mkdir('data', { recursive: true });
-await writeFile('data/news.json', JSON.stringify({ generatedAt: new Date().toISOString(), items: stories.slice(0, 60) }, null, 2) + '\\n');
+await writeFile('data/news.json', JSON.stringify({ generatedAt: new Date().toISOString(), items: stories.slice(0, 60) }, null, 2) + '\n');
 console.log('Prepared ' + Math.min(stories.length, 60) + ' news stories.');
