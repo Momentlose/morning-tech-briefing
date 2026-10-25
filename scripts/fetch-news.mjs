@@ -22,11 +22,11 @@ function field(xml, name) {
 }
 function categoryFor(title, summary, fallback) {
   const text = (title + ' ' + summary).toLowerCase();
-  if (/cyber|security|vulnerabilit|ransom|phishing|hack|malware|breach|exploit|漏洞|安全|攻击|勒索|黑客/.test(text)) return '网络安全';
-  if (/semiconductor|chip|gpu|processor|memory|silicon|nvidia|intel|amd|tsmc|半导体|芯片|显卡|存储/.test(text)) return '半导体';
-  if (/artificial intelligence|\bai\b|openai|anthropic|chatgpt|gpt|llm|model|agent|deepmind|人工智能|大模型|智能体/.test(text)) return '人工智能';
-  if (/regulat|government|policy|law|court|funding|investment|company|market|政府|政策|监管|融资|投资|企业|市场/.test(text)) return '产业与政策';
-  return fallback === '网络安全' ? '产业与政策' : fallback;
+  if (/biosecurity|government|regulation|regulatory|policy|law|court|funding|investment|company|companies|markets?|政府|政策|监管|融资|投资|企业|市场|生物安全/.test(text)) return '产业与政策';
+  if (/\bcyber[- ]?security\b|\bvulnerabilit(y|ies)\b|\bransomware\b|\bphishing\b|\bhack(ing|er|ers)?\b|\bmalware\b|\bdata breach\b|\bexploit\b|漏洞|网络安全|勒索|网络攻击|黑客|数据泄露/.test(text)) return '网络安全';
+  if (/\bsemiconductor(s)?\b|\bchips?\b|\bgpu(s)?\b|\bprocessors?\b|\bmemory\b|\bsilicon\b|\bnvidia\b|\bintel\b|\bamd\b|\btsmc\b|半导体|芯片|显卡|存储/.test(text)) return '半导体';
+  if (/artificial intelligence|\bai\b|\bopenai\b|\banthropic\b|\bchatgpt\b|\bgpt\b|\bllm\b|\bdeepmind\b|人工智能|大模型|智能体/.test(text)) return '人工智能';
+  return fallback;
 }
 function textOnly(html) {
   return decode(html).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
