@@ -31,6 +31,32 @@ function categoryFor(title, summary, fallback) {
   if (/artificial intelligence|\bai\b|\bopenai\b|\banthropic\b|\bchatgpt\b|\bgpt\b|\bllm\b|\bdeepmind\b|人工智能|大模型|智能体/.test(text)) return '人工智能';
   return '其他科技';
 }
+async function fetchArticlePreview(item) {
+  try {
+    const response = await fetch(item.link, {
+      redirect: 'follow',
+      signal: AbortSignal.timeout(9000),
+      headers: { 'user-agent': 'Mozilla/5.0 (compatible; MorningTechBriefing/1.0)', 'accept': 'text/html,application/xhtml+xml' }
+    });
+    if (!response.ok || !response.headers.get('content-type')?.includes('text/html')) return item.summary;
+    const html = await response.text();
+    const article = html.match(/<article\b[^>]*>([\s\S]*?)<\/article>/i)?.[1] || html;
+    const paragraphs = [...article.matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/gi)]
+      .map(match => textOnly(match[1]))
+      .filter(text => text.length >= 35);
+    if (paragraphs.length) return paragraphs.slice(0, 3).join(' ').slice(0, 420);
+    const metaTags = [...html.matchAll(/<meta\b[^>]*>/gi)].map(match => match[0]);
+    for (const tag of metaTags) {
+      if (!/(og:description|twitter:description|name=["']description["'])/i.test(tag)) continue;
+      const content = tag.match(/\bcontent=["']([^"']+)["']/i)?.[1];
+      if (content && textOnly(content).length >= 35) return textOnly(content).slice(0, 420);
+    }
+    return item.summary;
+  } catch {
+    return item.summary;
+  }
+}
+
 function textOnly(html) {
   return decode(html).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 }
