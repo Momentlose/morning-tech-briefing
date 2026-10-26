@@ -105,7 +105,12 @@ function render(){
   const panel=$('#analysis-'+button.dataset.analysis);panel.hidden=!panel.hidden;button.textContent=panel.hidden?'查看影响分析':'收起分析';button.setAttribute('aria-expanded',String(!panel.hidden))
  }));
  $('#stories').querySelectorAll('.source-group').forEach(group=>group.addEventListener('toggle',()=>{
-  if(!group.open)group.scrollIntoView({behavior:'smooth',block:'start'});
+  if(group.open){
+   group.dataset.openTop=String(group.getBoundingClientRect().top+window.scrollY);
+  }else{
+   const top=Number(group.dataset.openTop)||group.getBoundingClientRect().top+window.scrollY;
+   requestAnimationFrame(()=>window.scrollTo({top:Math.max(0,top-6),behavior:'smooth'}));
+  }
  }));
  observeRevealTargets($('#stories'));
 }
