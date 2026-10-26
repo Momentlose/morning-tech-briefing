@@ -1,11 +1,12 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 
 const feeds = [
-  ['BBC 科技', 'https://feeds.bbci.co.uk/news/technology/rss.xml', '互联网'],
-  ['Ars Technica', 'https://feeds.arstechnica.com/arstechnica/index', '产业与政策'],
-  ['The Verge', 'https://www.theverge.com/rss/index.xml', '互联网'],
-  ['OpenAI 官方动态', 'https://openai.com/news/rss.xml', '人工智能'],
-  ['NVIDIA 生成式 AI', 'https://nvidianews.nvidia.com/cats/generative_al.xml', '半导体'],
+  ['36氪', 'https://36kr.com/feed', '产业与政策'],
+  ['钛媒体', 'https://www.tmtpost.com/feed', '产业与政策'],
+  ['雷峰网·AI', 'https://www.leiphone.com/feed/categoryRss/name/ai', '人工智能'],
+  ['雷峰网·业界', 'https://www.leiphone.com/feed/categoryRss/name/industrynews', '产业与政策'],
+  ['爱范儿', 'https://www.ifanr.com/feed/', '互联网'],
+  ['极客公园', 'https://www.geekpark.net/rss', '互联网'],
   ['机器之心', 'https://www.jiqizhixin.com/rss', '人工智能'],
   ['量子位', 'https://www.qbitai.com/feed', '人工智能']
 ];
@@ -104,15 +105,17 @@ async function fetchFeed([label, url, cat]) {
   const response = await fetch(url, { signal: AbortSignal.timeout(20000), headers: { 'user-agent': 'MorningTechBriefing/1.0 (RSS reader)' } });
   if (!response.ok) throw new Error(label + ': HTTP ' + response.status);
   const xml = await response.text();
-  return [...xml.matchAll(/<item\b[\s\S]*?<\/item>/gi)].map(([item]) => {
+  const items = [...xml.matchAll(/<item\b[\s\S]*?<\/item>/gi)].map(([item]) => {
     const title = textOnly(field(item, 'title'));
     const link = field(item, 'link');
     const date = field(item, 'pubDate');
-    const source = textOnly(field(item, 'source')) || label;
+    const source = label;
     const summary = textOnly(field(item, 'description')).slice(0, 220);
     if (!title || !link || !date) return null;
     return { title, link, date, source, summary, cat: categoryFor(title, summary, cat) };
-  }).filter(Boolean);
+  }).filter(Boolean).slice(0, 24);
+  if (!items.length) throw new Error(label + ': no RSS items parsed');
+  return items;
 }
 
 const results = await Promise.allSettled(feeds.map(fetchFeed));
@@ -134,7 +137,13 @@ for (const result of results) {
 }
 stories.sort((a, b) => Date.parse(b.date) - Date.parse(a.date));
 if (!stories.length) throw new Error('No recent stories were returned by the RSS sources.');
-const publishedStories = stories.slice(0, 60);
+const sourceCounts = new Map();
+const publishedStories = stories.filter(item => {
+  const count = sourceCounts.get(item.source) || 0;
+  if (count >= 15) return false;
+  sourceCounts.set(item.source, count + 1);
+  return true;
+}).slice(0, 60);
 let translationCursor = 0;
 let translatedCount = 0;
 const translationWorkers = Array.from({ length: 3 }, async () => {
