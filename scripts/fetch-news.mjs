@@ -155,6 +155,19 @@ const translationWorkers = Array.from({ length: 3 }, async () => {
   }
 });
 await Promise.all(translationWorkers);
+
+let previewCursor = 0;
+let extractedPreviewCount = 0;
+const previewWorkers = Array.from({ length: 6 }, async () => {
+  while (previewCursor < publishedStories.length) {
+    const item = publishedStories[previewCursor++];
+    const rssSummary = item.summary;
+    item.summary = await fetchArticlePreview(item);
+    if (item.summary && item.summary !== rssSummary) extractedPreviewCount++;
+  }
+});
+await Promise.all(previewWorkers);
+
 await mkdir('data', { recursive: true });
 await writeFile('data/news.json', JSON.stringify({ generatedAt: new Date().toISOString(), items: publishedStories }, null, 2) + '\n');
-console.log('Prepared ' + publishedStories.length + ' news stories; translated ' + translatedCount + ' headlines.');
+console.log('Prepared ' + publishedStories.length + ' news stories; translated ' + translatedCount + ' headlines; extracted ' + extractedPreviewCount + ' article previews.');
