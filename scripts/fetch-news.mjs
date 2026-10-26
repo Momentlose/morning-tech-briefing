@@ -34,7 +34,7 @@ function categoryFor(title, summary, fallback) {
 async function fetchArticlePreview(item) {
   const isUsefulPreview = text =>
     text.length >= 35 &&
-    !/^Comprehensive up-to-date news coverage, aggregated from sources all over the world by Google News\\.?$/i.test(text);
+    !/^Comprehensive up-to-date news coverage, aggregated from sources all over the world by Google News\.?$/i.test(text);
   const fallbackPreview = isUsefulPreview(item.summary) ? item.summary : '';
   try {
     const response = await fetch(item.link, {
@@ -44,15 +44,15 @@ async function fetchArticlePreview(item) {
     });
     if (!response.ok || !response.headers.get('content-type')?.includes('text/html')) return fallbackPreview;
     const html = await response.text();
-    const article = html.match(/<article\\b[^>]*>([\\s\\S]*?)<\\/article>/i)?.[1] || html;
-    const paragraphs = [...article.matchAll(/<p\\b[^>]*>([\\s\\S]*?)<\\/p>/gi)]
+    const article = html.match(/<article\b[^>]*>([\s\S]*?)<\/article>/i)?.[1] || html;
+    const paragraphs = [...article.matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/gi)]
       .map(match => textOnly(match[1]))
       .filter(isUsefulPreview);
     if (paragraphs.length) return paragraphs.slice(0, 3).join(' ').slice(0, 420);
-    const metaTags = [...html.matchAll(/<meta\\b[^>]*>/gi)].map(match => match[0]);
+    const metaTags = [...html.matchAll(/<meta\b[^>]*>/gi)].map(match => match[0]);
     for (const tag of metaTags) {
       if (!/(og:description|twitter:description|name=["']description["'])/i.test(tag)) continue;
-      const content = tag.match(/\\bcontent=["']([^"']+)["']/i)?.[1];
+      const content = tag.match(/\bcontent=["']([^"']+)["']/i)?.[1];
       if (content) {
         const preview = textOnly(content);
         if (isUsefulPreview(preview)) return preview.slice(0, 420);
@@ -142,7 +142,7 @@ async function fetchFeed([label, url, cat, fallbackUrl]) {
       const response = await fetch(feedUrl, { signal: AbortSignal.timeout(20000), headers: { 'user-agent': 'MorningTechBriefing/1.0 (RSS reader)' } });
       if (!response.ok) throw new Error('HTTP ' + response.status);
       const xml = await response.text();
-      const items = [...xml.matchAll(/<item\\b[\\s\\S]*?<\\/item>/gi)].map(([item]) => {
+      const items = [...xml.matchAll(/<item\b[\s\S]*?<\/item>/gi)].map(([item]) => {
         const title = textOnly(field(item, 'title'));
         const link = field(item, 'link');
         const date = field(item, 'pubDate');
