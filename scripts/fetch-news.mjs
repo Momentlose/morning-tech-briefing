@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 
 const feeds = [
-  ['36氪', 'https://news.google.com/rss/search?q=site%3A36kr.com+%28AI+OR+科技+OR+半导体+OR+互联网%29&hl=zh-CN&gl=CN&ceid=CN:zh-Hans', '产业与政策'],
+  ['36氪', 'https://36kr.com/feed', '产业与政策', 'https://news.google.com/rss/search?q=site%3A36kr.com+%28AI+OR+科技+OR+半导体+OR+互联网%29&hl=zh-CN&gl=CN&ceid=CN:zh-Hans'],
   ['钛媒体', 'https://www.tmtpost.com/feed', '产业与政策'],
   ['雷峰网·AI', 'https://www.leiphone.com/feed/categoryRss/name/ai', '人工智能'],
   ['雷峰网·业界', 'https://www.leiphone.com/feed/categoryRss/name/industrynews', '产业与政策'],
@@ -32,28 +32,35 @@ function categoryFor(title, summary, fallback) {
   return '其他科技';
 }
 async function fetchArticlePreview(item) {
+  const isUsefulPreview = text =>
+    text.length >= 35 &&
+    !/^Comprehensive up-to-date news coverage, aggregated from sources all over the world by Google News\.?$/i.test(text);
+  const fallbackPreview = isUsefulPreview(item.summary) ? item.summary : '';
   try {
     const response = await fetch(item.link, {
       redirect: 'follow',
       signal: AbortSignal.timeout(9000),
       headers: { 'user-agent': 'Mozilla/5.0 (compatible; MorningTechBriefing/1.0)', 'accept': 'text/html,application/xhtml+xml' }
     });
-    if (!response.ok || !response.headers.get('content-type')?.includes('text/html')) return item.summary;
+    if (!response.ok || !response.headers.get('content-type')?.includes('text/html')) return fallbackPreview;
     const html = await response.text();
     const article = html.match(/<article\b[^>]*>([\s\S]*?)<\/article>/i)?.[1] || html;
     const paragraphs = [...article.matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/gi)]
       .map(match => textOnly(match[1]))
-      .filter(text => text.length >= 35);
+      .filter(isUsefulPreview);
     if (paragraphs.length) return paragraphs.slice(0, 3).join(' ').slice(0, 420);
     const metaTags = [...html.matchAll(/<meta\b[^>]*>/gi)].map(match => match[0]);
     for (const tag of metaTags) {
       if (!/(og:description|twitter:description|name=["']description["'])/i.test(tag)) continue;
       const content = tag.match(/\bcontent=["']([^"']+)["']/i)?.[1];
-      if (content && textOnly(content).length >= 35) return textOnly(content).slice(0, 420);
+      if (content) {
+        const preview = textOnly(content);
+        if (isUsefulPreview(preview)) return preview.slice(0, 420);
+      }
     }
-    return item.summary;
+    return fallbackPreview;
   } catch {
-    return item.summary;
+    return fallbackPreview;
   }
 }
 
@@ -127,21 +134,32 @@ async function translateTitle(title) {
   }
   return title;
 }
-async function fetchFeed([label, url, cat]) {
-  const response = await fetch(url, { signal: AbortSignal.timeout(20000), headers: { 'user-agent': 'MorningTechBriefing/1.0 (RSS reader)' } });
-  if (!response.ok) throw new Error(label + ': HTTP ' + response.status);
-  const xml = await response.text();
-  const items = [...xml.matchAll(/<item\b[\s\S]*?<\/item>/gi)].map(([item]) => {
-    const title = textOnly(field(item, 'title'));
-    const link = field(item, 'link');
-    const date = field(item, 'pubDate');
-    const source = label;
-    const summary = textOnly(field(item, 'description')).slice(0, 220);
-    if (!title || !link || !date) return null;
-    return { title, link, date, source, summary, cat: categoryFor(title, summary, cat) };
-  }).filter(Boolean).slice(0, 24);
-  if (!items.length) throw new Error(label + ': no RSS items parsed');
-  return items;
+async function fetchFeed([label, url, cat, fallbackUrl]) {
+  const urls = [url, fallbackUrl].filter(Boolean);
+  const failures = [];
+  for (const [index, feedUrl] of urls.entries()) {
+    try {
+      const response = await fetch(feedUrl, { signal: AbortSignal.timeout(20000), headers: { 'user-agent': 'MorningTechBriefing/1.0 (RSS reader)' } });
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      const xml = await response.text();
+      const items = [...xml.matchAll(/<item\b[\s\S]*?<\/item>/gi)].map(([item]) => {
+        const title = textOnly(field(item, 'title'));
+        const link = field(item, 'link');
+        const date = field(item, 'pubDate');
+        const source = label;
+        const summary = textOnly(field(item, 'description')).slice(0, 220);
+        if (!title || !link || !date) return null;
+        return { title, link, date, source, summary, cat: categoryFor(title, summary, cat) };
+      }).filter(Boolean).slice(0, 24);
+      if (!items.length) throw new Error('no RSS items parsed');
+      if (index > 0) console.warn(label + ': primary RSS unavailable; fallback feed succeeded.');
+      return items;
+    } catch (error) {
+      failures.push(error?.message || String(error));
+      if (index < urls.length - 1) console.warn(label + ': primary RSS failed; trying fallback feed.');
+    }
+  }
+  throw new Error(label + ': ' + failures.join('; '));
 }
 
 const results = await Promise.allSettled(feeds.map(fetchFeed));
