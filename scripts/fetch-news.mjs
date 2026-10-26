@@ -1,13 +1,13 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 
 const feeds = [
-  ['36氪', 'https://36kr.com/feed', '产业与政策'],
+  ['36氪', 'https://news.google.com/rss/search?q=site%3A36kr.com+%28AI+OR+科技+OR+半导体+OR+互联网%29&hl=zh-CN&gl=CN&ceid=CN:zh-Hans', '产业与政策'],
   ['钛媒体', 'https://www.tmtpost.com/feed', '产业与政策'],
   ['雷峰网·AI', 'https://www.leiphone.com/feed/categoryRss/name/ai', '人工智能'],
   ['雷峰网·业界', 'https://www.leiphone.com/feed/categoryRss/name/industrynews', '产业与政策'],
   ['爱范儿', 'https://www.ifanr.com/feed/', '互联网'],
   ['极客公园', 'https://www.geekpark.net/rss', '互联网'],
-  ['机器之心', 'https://www.jiqizhixin.com/rss', '人工智能'],
+  ['IT之家', 'https://www.ithome.com/rss/', '其他科技'],
   ['量子位', 'https://www.qbitai.com/feed', '人工智能']
 ];
 
