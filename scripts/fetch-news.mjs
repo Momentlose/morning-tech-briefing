@@ -86,7 +86,7 @@ async function fetchSspaiHot() {
     });
     if (!response.ok) throw new Error('HTTP ' + response.status);
     const payload = await response.json();
-    const rows = Array.isArray(payload.data) ? payload.data : [];
+    const rows = Array.isArray(payload.data?.data) ? payload.data.data : Array.isArray(payload.data) ? payload.data : [];
     const items = rows.map(item => ({
       title: textOnly(item.title || ''),
       link: item.url || item.link || (item.id ? 'https://sspai.com/post/' + item.id : ''),
