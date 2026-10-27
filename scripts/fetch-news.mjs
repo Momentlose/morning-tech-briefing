@@ -8,9 +8,7 @@ const feeds = [
   ['爱范儿', 'https://www.ifanr.com/feed/', '互联网'],
   ['极客公园', 'https://www.geekpark.net/rss', '互联网'],
   ['IT之家', 'https://www.ithome.com/rss/', '其他科技'],
-  ['量子位', 'https://www.qbitai.com/feed', '人工智能'],
-  ['知乎热榜', 'https://rsshub.app/zhihu/hotlist', '社区热榜'],
-  ['虎扑步行街热帖', 'https://rsshub.app/hupu/bxj/34/0', '社区热榜']
+  ['量子位', 'https://www.qbitai.com/feed', '人工智能']
 ];
 
 function decode(value = '') {
@@ -70,36 +68,124 @@ function textOnly(html) {
   return decode(html).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
+function toIsoDate(value, fallback = Date.now()) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return new Date(value < 1e12 ? value * 1000 : value).toISOString();
+  }
+  const timestamp = Date.parse(value || '');
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : new Date(fallback).toISOString();
+}
+
 async function fetchSspaiHot() {
   const label = '少数派热门文章';
-  const endpoint = 'https://sspai.com/api/v1/article/tag/page/get?limit=20&offset=0&sort=hot';
+  const endpoint = 'https://sspai.com/api/v1/article/index/page/get?limit=50&offset=0&created_at=0';
   try {
     const response = await fetch(endpoint, {
       signal: AbortSignal.timeout(15000),
-      headers: { 'user-agent': 'MorningTechBriefing/1.0', 'accept': 'application/json' }
+      headers: { 'user-agent': 'Mozilla/5.0 (compatible; MorningTechBriefing/1.0)', 'accept': 'application/json' }
     });
     if (!response.ok) throw new Error('HTTP ' + response.status);
     const payload = await response.json();
-    const rows = Array.isArray(payload.data) ? payload.data : Array.isArray(payload.data?.list) ? payload.data.list : [];
-    const items = rows.map(item => {
-      const rawDate = item.released_time || item.released_at || item.created_at || item.createdAt || item.created_time;
-      const timestamp = typeof rawDate === 'number' ? (rawDate < 1e12 ? rawDate * 1000 : rawDate) : Date.parse(rawDate || '');
-      const link = item.url || item.link || (item.id ? 'https://sspai.com/post/' + item.id : '');
-      return {
-        title: textOnly(item.title || ''),
-        link,
-        date: Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : '',
-        source: label,
-        summary: textOnly(item.summary || item.description || item.content || '').slice(0, 220),
-        cat: '社区热榜'
-      };
-    }).filter(item => item.title && item.link && item.date && item.link.startsWith('https://')).slice(0, 15);
-    if (!items.length) throw new Error('no usable hot articles returned');
-    return items;
+    const rows = Array.isArray(payload.data?.data) ? payload.data.data : Array.isArray(payload.data) ? payload.data : [];
+    const items = rows.map(item => ({
+      title: textOnly(item.title || ''),
+      link: item.url || item.link || (item.id ? 'https://sspai.com/post/' + item.id : ''),
+      date: toIsoDate(item.released_time || item.released_at || item.created_at || item.createdAt),
+      source: label,
+      summary: textOnly(item.summary || item.description || '').slice(0, 220),
+      cat: '社区热榜',
+      popularity: Number(item.like_count || 0) * 1000 + Number(item.comment_count || 0)
+    })).filter(item => item.title && item.link.startsWith('https://sspai.com/'));
+    items.sort((a, b) => b.popularity - a.popularity);
+    if (!items.length) throw new Error('no usable articles returned');
+    return items.slice(0, 15).map(({ popularity, ...item }) => item);
   } catch (error) {
-    console.warn(label + ': hot endpoint unavailable; using the public RSSHub homepage feed. ' + (error?.message || String(error)));
-    return fetchFeed([label, 'https://rsshub.app/sspai/index', '社区热榜']);
+    console.warn(label + ': hot feed unavailable; falling back to the official RSS feed. ' + (error?.message || String(error)));
+    return fetchFeed([label, 'https://sspai.com/feed', '社区热榜']);
   }
+}
+
+async function fetchZhihuHot() {
+  const label = '知乎热榜';
+  const endpoints = [
+    'https://api.zhihu.com/topstory/hot-list?limit=30',
+    'https://www.zhihu.com/api/v3/feed/topstory/hot-lists/total?limit=30'
+  ];
+  const failures = [];
+  for (const endpoint of endpoints) {
+    try {
+      const response = await fetch(endpoint, {
+        signal: AbortSignal.timeout(15000),
+        headers: {
+          'user-agent': 'com.zhihu.android/Futureve/10.0.0 (iPhone; iOS 18.0; Scale/3.00)',
+          'accept': 'application/json',
+          'referer': 'https://www.zhihu.com/hot'
+        }
+      });
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      const payload = await response.json();
+      const rows = Array.isArray(payload.data) ? payload.data : Array.isArray(payload.data?.data) ? payload.data.data : [];
+      const items = rows.map(item => {
+        const target = item.target || item;
+        const id = target.id || String(target.url || '').match(/questions?\/(\d+)/)?.[1];
+        let link = target.url || item.url || (id ? 'https://www.zhihu.com/question/' + id : '');
+        if (link.startsWith('https://api.zhihu.com/questions/')) link = link.replace('https://api.zhihu.com/questions/', 'https://www.zhihu.com/question/');
+        return {
+          title: textOnly(target.title || item.title || ''),
+          link,
+          date: toIsoDate(target.created || item.created || item.updated_time),
+          source: label,
+          summary: textOnly(target.excerpt || item.excerpt || item.detail_text || '').slice(0, 220),
+          cat: '社区热榜'
+        };
+      }).filter(item => item.title && item.link.startsWith('https://www.zhihu.com/')).slice(0, 15);
+      if (!items.length) throw new Error('no usable hot topics returned');
+      return items;
+    } catch (error) {
+      failures.push(error?.message || String(error));
+    }
+  }
+  throw new Error(label + ': ' + failures.join('; '));
+}
+
+async function fetchHupuHot() {
+  const label = '虎扑步行街热帖';
+  const response = await fetch('https://bbs.hupu.com/bxj', {
+    signal: AbortSignal.timeout(15000),
+    headers: {
+      'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36',
+      'accept': 'text/html,application/xhtml+xml',
+      'referer': 'https://bbs.hupu.com/'
+    }
+  });
+  if (!response.ok) throw new Error(label + ': HTTP ' + response.status);
+  const html = await response.text();
+  const seen = new Set();
+  const now = new Date().toISOString();
+  const items = [...html.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi)].map(match => {
+    const href = match[1].match(/\bhref=["']([^"']+)["']/i)?.[1] || '';
+    const title = textOnly(match[2]);
+    if (!href || !title || title.length < 8) return null;
+    let url;
+    try { url = new URL(href, 'https://bbs.hupu.com'); } catch { return null; }
+    if (!/(^|\.)hupu\.com$/i.test(url.hostname) || !/^\/\d{6,}(?:\.html)?\/?$/.test(url.pathname)) return null;
+    const link = url.href;
+    if (seen.has(link)) return null;
+    seen.add(link);
+    const context = html.slice(Math.max(0, match.index - 500), Math.min(html.length, match.index + match[0].length + 700));
+    const rawDate = context.match(/\bdatetime=["']([^"']+)["']/i)?.[1] || context.match(/\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2})?)?/)?.[0];
+    const summaryMatch = context.match(/<(?:p|div)\b[^>]*class=["'][^"']*(?:post-desc|post-summary|post-content)[^"']*["'][^>]*>([\s\S]*?)<\/(?:p|div)>/i);
+    return {
+      title,
+      link,
+      date: toIsoDate(rawDate, Date.now()),
+      source: label,
+      summary: textOnly(summaryMatch?.[1] || '').slice(0, 220),
+      cat: '社区热榜'
+    };
+  }).filter(Boolean).slice(0, 15);
+  if (!items.length) throw new Error(label + ': no hot threads parsed');
+  return items;
 }
 
 function impactFor(item) {
@@ -203,7 +289,7 @@ async function fetchFeed([label, url, cat, fallbackUrl]) {
   throw new Error(label + ': ' + failures.join('; '));
 }
 
-const results = await Promise.allSettled([...feeds.map(fetchFeed), fetchSspaiHot()]);
+const results = await Promise.allSettled([...feeds.map(fetchFeed), fetchSspaiHot(), fetchZhihuHot(), fetchHupuHot()]);
 const stories = [];
 const seen = new Set();
 const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
