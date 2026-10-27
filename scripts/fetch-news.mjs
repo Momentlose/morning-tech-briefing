@@ -8,7 +8,9 @@ const feeds = [
   ['爱范儿', 'https://www.ifanr.com/feed/', '互联网'],
   ['极客公园', 'https://www.geekpark.net/rss', '互联网'],
   ['IT之家', 'https://www.ithome.com/rss/', '其他科技'],
-  ['量子位', 'https://www.qbitai.com/feed', '人工智能']
+  ['量子位', 'https://www.qbitai.com/feed', '人工智能'],
+  ['知乎热榜', 'https://rsshub.app/zhihu/hotlist', '社区热榜'],
+  ['虎扑步行街热帖', 'https://rsshub.app/hupu/bxj/34/0', '社区热榜']
 ];
 
 function decode(value = '') {
@@ -68,7 +70,46 @@ function textOnly(html) {
   return decode(html).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
+async function fetchSspaiHot() {
+  const label = '少数派热门文章';
+  const endpoint = 'https://sspai.com/api/v1/article/tag/page/get?limit=20&offset=0&sort=hot';
+  try {
+    const response = await fetch(endpoint, {
+      signal: AbortSignal.timeout(15000),
+      headers: { 'user-agent': 'MorningTechBriefing/1.0', 'accept': 'application/json' }
+    });
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    const payload = await response.json();
+    const rows = Array.isArray(payload.data) ? payload.data : Array.isArray(payload.data?.list) ? payload.data.list : [];
+    const items = rows.map(item => {
+      const rawDate = item.released_time || item.released_at || item.created_at || item.createdAt || item.created_time;
+      const timestamp = typeof rawDate === 'number' ? (rawDate < 1e12 ? rawDate * 1000 : rawDate) : Date.parse(rawDate || '');
+      const link = item.url || item.link || (item.id ? 'https://sspai.com/post/' + item.id : '');
+      return {
+        title: textOnly(item.title || ''),
+        link,
+        date: Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : '',
+        source: label,
+        summary: textOnly(item.summary || item.description || item.content || '').slice(0, 220),
+        cat: '社区热榜'
+      };
+    }).filter(item => item.title && item.link && item.date && item.link.startsWith('https://')).slice(0, 15);
+    if (!items.length) throw new Error('no usable hot articles returned');
+    return items;
+  } catch (error) {
+    console.warn(label + ': hot endpoint unavailable; using the public RSSHub homepage feed. ' + (error?.message || String(error)));
+    return fetchFeed([label, 'https://rsshub.app/sspai/index', '社区热榜']);
+  }
+}
+
 function impactFor(item) {
+  if (item.cat === '社区热榜') {
+    return {
+      positive: '这类榜单可帮助观察公众正在关注的话题，也可能提供行业情绪与产品讨论的线索。',
+      negative: '热度和讨论量不等于企业收入、盈利或估值变化；社区内容也可能偏离事实或带有情绪。',
+      watch: '核对原帖、权威报道和公司公告，再判断是否与持仓行业存在可验证的关联。'
+    };
+  }
   const text = (item.title + ' ' + item.summary).toLowerCase();
   const focus = {
     '人工智能': {
@@ -149,7 +190,7 @@ async function fetchFeed([label, url, cat, fallbackUrl]) {
         const source = label;
         const summary = textOnly(field(item, 'description')).slice(0, 220);
         if (!title || !link || !date) return null;
-        return { title, link, date, source, summary, cat: categoryFor(title, summary, cat) };
+        return { title, link, date, source, summary, cat: cat === '社区热榜' ? cat : categoryFor(title, summary, cat) };
       }).filter(Boolean).slice(0, 24);
       if (!items.length) throw new Error('no RSS items parsed');
       if (index > 0) console.warn(label + ': primary RSS unavailable; fallback feed succeeded.');
@@ -162,7 +203,7 @@ async function fetchFeed([label, url, cat, fallbackUrl]) {
   throw new Error(label + ': ' + failures.join('; '));
 }
 
-const results = await Promise.allSettled(feeds.map(fetchFeed));
+const results = await Promise.allSettled([...feeds.map(fetchFeed), fetchSspaiHot()]);
 const stories = [];
 const seen = new Set();
 const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
@@ -187,7 +228,7 @@ const publishedStories = stories.filter(item => {
   if (count >= 15) return false;
   sourceCounts.set(item.source, count + 1);
   return true;
-}).slice(0, 60);
+}).slice(0, 75);
 let translationCursor = 0;
 let translatedCount = 0;
 const translationWorkers = Array.from({ length: 3 }, async () => {
