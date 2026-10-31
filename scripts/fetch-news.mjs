@@ -14,6 +14,7 @@ const feeds = [
 function decode(value = '') {
   return value
     .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+    .replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'")
     .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
@@ -34,7 +35,8 @@ function categoryFor(title, summary, fallback) {
 async function fetchArticlePreview(item) {
   const isUsefulPreview = text =>
     text.length >= 35 &&
-    !/^Comprehensive up-to-date news coverage, aggregated from sources all over the world by Google News\.?$/i.test(text);
+    !/^Comprehensive up-to-date news coverage, aggregated from sources all over the world by Google News\.?$/i.test(text) &&
+    !/copyright ©|版权所有|ICP备|粤ICP|沪ICP/i.test(text);
   const fallbackPreview = isUsefulPreview(item.summary) ? item.summary : '';
   try {
     const response = await fetch(item.link, {
@@ -331,6 +333,8 @@ const results = await Promise.allSettled([...feeds.map(fetchFeed), fetchSspaiHot
 const stories = [];
 const seen = new Set();
 const cutoff = Date.now() - 48 * 60 * 60 * 1000;
+const maxAge = Date.now() - 7 * 24 * 60 * 60 * 1000;
+const quietFallbacks = new Map();
 for (const result of results) {
   if (result.status !== 'fulfilled') {
     console.warn(result.reason?.message || 'RSS feed failed');
@@ -339,11 +343,20 @@ for (const result of results) {
   for (const item of result.value) {
     item.link = normalizeLink(item.link);
     const timestamp = Date.parse(item.date);
-    if (!Number.isFinite(timestamp) || timestamp < cutoff || timestamp > Date.now() + 60 * 60 * 1000 || seen.has(item.link)) continue;
+    if (!Number.isFinite(timestamp) || timestamp < maxAge || timestamp > Date.now() + 60 * 60 * 1000 || seen.has(item.link)) continue;
     if (!item.link.startsWith('https://')) continue;
     seen.add(item.link);
-    stories.push(item);
+    if (timestamp >= cutoff) {
+      stories.push(item);
+    } else {
+      const previous = quietFallbacks.get(item.source);
+      if (!previous || timestamp > Date.parse(previous.date)) quietFallbacks.set(item.source, item);
+    }
   }
+}
+const freshSources = new Set(stories.map(item => item.source));
+for (const [source, item] of quietFallbacks) {
+  if (!freshSources.has(source)) stories.push(item);
 }
 stories.sort((a, b) => Date.parse(b.date) - Date.parse(a.date));
 if (!stories.length) throw new Error('No recent stories were returned by the RSS sources.');

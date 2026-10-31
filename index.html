@@ -24,10 +24,15 @@
 .marketbox{background:#fff;border:1px solid var(--line);border-radius:16px;padding:16px;margin:12px 0}.marketbox h3{font-size:14px;margin:0 0 8px}.marketbox ul{margin:0;padding-left:18px;color:#647169;font-size:12px}.marketbox li+li{margin-top:6px}.notice{color:#8b948e;font-size:10px;margin:17px 2px}.state{text-align:center;color:var(--muted);font-size:13px;padding:30px 10px}.foot{border-top:1px solid var(--line);padding-top:20px;margin-top:25px;text-align:center;color:#929a95;font-size:10px}
 .bottom{position:fixed;bottom:0;left:0;right:0;padding:11px 18px calc(11px + env(safe-area-inset-bottom));background:#f6f7f4eb;backdrop-filter:blur(14px);border-top:1px solid #e3e8e2;display:flex;justify-content:center}.bottomin{width:min(684px,100%);display:flex;justify-content:space-between;align-items:center}.bottom strong{font-size:12px}.bottom small{display:block;color:var(--muted);font-size:10px}.actions{display:flex;gap:8px}.refresh,.share{border:0;border-radius:12px;padding:10px 13px;font-size:12px;font-weight:700}.refresh{background:var(--ink);color:white}.share{background:#e8f1eb;color:var(--green)}.refresh:disabled{opacity:.55}
 @media(min-width:620px){.shell{padding-top:10px}.hero{padding-top:42px}.story{padding:20px}.story h3{font-size:19px}}
+.source-groups{gap:18px}.source-group{transition:transform .22s ease,box-shadow .22s ease}.source-group:not([open]){box-shadow:0 4px 0 -1px #fff,0 5px 0 0 #e4eae5,0 10px 0 -2px #fff,0 11px 0 0 #e7ece7,var(--shadow)}.source-group:not([open]):hover{transform:translateY(-2px)}.source-group[open] .source-content{animation:groupReveal .26s ease}.source-group.is-snapped{box-shadow:0 0 0 2px #28614b55,0 18px 40px #22382c2e;animation:snapPulse .72s ease}
+@keyframes groupReveal{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}@keyframes snapPulse{0%{transform:scale(1)}35%{transform:scale(.992)}100%{transform:scale(1)}}
+.snap-rail{position:fixed;left:max(0px,calc((100vw - 720px)/2 - 32px));top:50%;transform:translateY(-50%);width:22px;height:min(56vh,460px);z-index:120;opacity:0;pointer-events:none;transition:opacity .2s ease;touch-action:none}.snap-rail.is-visible{opacity:1;pointer-events:auto}.snap-rail::before{content:"";position:absolute;left:10px;top:0;bottom:0;width:2px;border-radius:2px;background:#dfe7e0}.snap-fill{position:absolute;left:10px;top:0;width:2px;height:0;border-radius:2px;background:linear-gradient(180deg,#28614b,#7db291)}.snap-thumb{position:absolute;left:3px;top:0;width:14px;height:14px;margin-top:-7px;border-radius:50%;background:#fff;border:2px solid var(--green);box-shadow:0 2px 8px #22382c33}.snap-rail.is-dragging .snap-thumb{transform:scale(1.18)}.snap-label{position:absolute;left:26px;top:0;transform:translateY(-50%);white-space:nowrap;background:var(--ink);color:#fff;font-size:11px;font-weight:600;padding:5px 9px;border-radius:9px;opacity:0;pointer-events:none;transition:opacity .15s ease}.snap-rail.is-dragging .snap-label{opacity:1}
+@media(prefers-reduced-motion:reduce){.source-group,.snap-fill,.snap-thumb,.snap-label,.snap-rail{transition:none}.source-group[open] .source-content,.source-group.is-snapped{animation:none}}
 </style>
 </head>
 <body>
 <div class="scroll-progress" aria-hidden="true"><span id="scrollProgress"></span></div>
+<div class="snap-rail" id="snapRail" aria-hidden="true"><span class="snap-fill" id="snapFill"></span><span class="snap-thumb" id="snapThumb"></span><span class="snap-label" id="snapLabel"></span></div>
 <main class="shell">
 <header class="top"><div class="brand">◉ <span>早间</span>科技情报</div><div class="top-actions"><button class="favorites-top" id="favoritesTop" type="button" aria-label="打开收藏夹"><span>☆ 收藏夹</span><b id="favoriteCount">0</b></button><button class="iconbtn" id="refreshTop" aria-label="刷新资讯">↻</button></div></header>
 <section class="hero reveal-target"><div class="eyebrow">TECH & AI · DAILY BRIEFING</div><h1>看懂科技，<br>再看市场。</h1><p>每天几分钟，跟上科技与 AI 的关键变化。</p></section>
@@ -70,10 +75,38 @@ function updateScrollProgress(){
   $('#scrollProgress').style.width=(max>0?Math.min(100,Math.max(0,window.scrollY/max*100)):0)+'%';
 }
 let progressQueued=false;
-window.addEventListener('scroll',()=>{if(!progressQueued){progressQueued=true;requestAnimationFrame(()=>{updateScrollProgress();progressQueued=false})}},{passive:true});
-window.addEventListener('resize',updateScrollProgress,{passive:true});
+window.addEventListener('scroll',()=>{if(!progressQueued){progressQueued=true;requestAnimationFrame(()=>{updateScrollProgress();updateSnapRail();progressQueued=false})}},{passive:true});
+window.addEventListener('resize',()=>{updateScrollProgress();updateSnapRail()},{passive:true});
 observeRevealTargets();
 updateScrollProgress();
+const snapRail=$('#snapRail'),snapFill=$('#snapFill'),snapThumb=$('#snapThumb'),snapLabel=$('#snapLabel');
+const snapState={folders:[],start:0,end:0,dragging:false,target:0};
+function rebuildSnapRail(){
+ const groups=[...document.querySelectorAll('#stories .source-group')];
+ if(!groups.length){snapState.folders=[];snapRail.classList.remove('is-visible');return}
+ snapState.folders=groups.map(g=>({group:g,name:(g.querySelector('.source-name')?.textContent||'来源').trim(),top:g.getBoundingClientRect().top+window.scrollY}));
+ const first=groups[0].getBoundingClientRect(),last=groups[groups.length-1].getBoundingClientRect();
+ snapState.start=first.top+window.scrollY;
+ snapState.end=last.bottom+window.scrollY;
+}
+function snapPct(y){const span=Math.max(1,snapState.end-snapState.start);return Math.min(1,Math.max(0,(y-snapState.start)/span))}
+function nearestSnapFolder(pct){const target=snapState.start+pct*(snapState.end-snapState.start);let best=0,dist=Infinity;snapState.folders.forEach((f,i)=>{const d=Math.abs(f.top-target);if(d<dist){dist=d;best=i}});return best}
+function setSnapRail(pct,label){const pos=(Math.min(1,Math.max(0,pct))*100).toFixed(2)+'%';snapFill.style.height=pos;snapThumb.style.top=pos;if(label!==undefined){snapLabel.textContent=label;snapLabel.style.top=pos}}
+function updateSnapRail(){
+ if(!snapState.dragging)rebuildSnapRail();
+ if(!snapState.folders.length)return;
+ const viewMid=window.scrollY+window.innerHeight*.5;
+ snapRail.classList.toggle('is-visible',viewMid>snapState.start-window.innerHeight*.45&&viewMid<snapState.end+window.innerHeight*.45);
+ if(!snapState.dragging)setSnapRail(snapPct(window.scrollY+window.innerHeight*.35));
+}
+function railFraction(e){const r=snapRail.getBoundingClientRect();return Math.min(1,Math.max(0,(e.clientY-r.top)/Math.max(1,r.height)))}
+function railDragMove(e){const pct=railFraction(e);const i=nearestSnapFolder(pct);snapState.target=i;const folder=snapState.folders[i];if(folder)setSnapRail(snapPct(folder.top),folder.name)}
+snapRail.addEventListener('pointerdown',e=>{e.preventDefault();rebuildSnapRail();if(!snapState.folders.length)return;snapState.dragging=true;snapRail.classList.add('is-dragging');try{snapRail.setPointerCapture(e.pointerId)}catch{}railDragMove(e)});
+snapRail.addEventListener('pointermove',e=>{if(snapState.dragging)railDragMove(e)});
+function endSnapDrag(e){if(!snapState.dragging)return;snapState.dragging=false;snapRail.classList.remove('is-dragging');if(e)try{snapRail.releasePointerCapture(e.pointerId)}catch{}const folder=snapState.folders[snapState.target];if(!folder)return;const top=folder.group.getBoundingClientRect().top+window.scrollY;window.scrollTo({top:Math.max(0,top-8),behavior:'smooth'});folder.group.classList.remove('is-snapped');void folder.group.offsetWidth;folder.group.classList.add('is-snapped');setTimeout(()=>folder.group.classList.remove('is-snapped'),900)}
+snapRail.addEventListener('pointerup',endSnapDrag);
+snapRail.addEventListener('pointercancel',endSnapDrag);
+updateSnapRail();
 function render(){
  const favorites=readFavorites();
  $('#favoriteCount').textContent=String(favorites.length);
@@ -116,6 +149,7 @@ function render(){
   }
  }));
  observeRevealTargets($('#stories'));
+ requestAnimationFrame(updateSnapRail);
 }
 async function load(){const btn=$('#refreshBtn');btn.disabled=true;$('#status').textContent='正在更新';$('#stories').innerHTML='<div class="state">正在加载今早整理的新闻…</div>';try{const res=await fetch('./data/news.json?ts='+Date.now(),{cache:'no-store'});if(!res.ok)throw Error('news');const payload=await res.json();allStories=(payload.items||[]).filter(x=>x.title&&x.link).sort((a,b)=>new Date(b.date)-new Date(a.date));if(!allStories.length)throw Error('empty');render();const stamp=payload.generatedAt?new Intl.DateTimeFormat('zh-CN',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}).format(new Date(payload.generatedAt)):'';$('#status').textContent=stamp?'更新至 '+stamp:'已更新';$('#updated').textContent=stamp?'新闻更新于 '+stamp:'已更新';localStorage.setItem('morningTechCache',JSON.stringify({at:Date.now(),items:allStories}));}catch(e){const cached=localStorage.getItem('morningTechCache');if(cached){try{allStories=JSON.parse(cached).items;render();$('#status').textContent='显示上次缓存'}catch{$('#stories').innerHTML='<div class="state">暂时无法读取资讯，请稍后刷新。</div>'}}else{$('#stories').innerHTML='<div class="state">今日资讯正在生成中，稍后刷新即可。</div>';$('#status').textContent='正在准备今日简报'}}finally{btn.disabled=false}}
 document.querySelectorAll('#filters button').forEach(b=>b.addEventListener('click',()=>{document.querySelector('#filters .active').classList.remove('active');b.classList.add('active');category=b.dataset.cat;render()}));
