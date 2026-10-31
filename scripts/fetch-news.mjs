@@ -2,13 +2,13 @@ import { mkdir, writeFile } from 'node:fs/promises';
 
 const feeds = [
   ['36氪', 'https://www.36kr.com/feed', '产业与政策', 'https://news.google.com/rss/search?q=site%3A36kr.com+%28AI+OR+%E7%A7%91%E6%8A%80+OR+%E5%8D%8A%E5%AF%BC%E4%BD%93+OR+%E4%BA%92%E8%81%94%E7%BD%91%29&hl=zh-CN&gl=CN&ceid=CN:zh-Hans'],
-  ['钛媒体', 'https://www.tmtpost.com/feed', '产业与政策'],
+  ['钛媒体', 'https://www.tmtpost.com/feed', '产业与政策', 'https://news.google.com/rss/search?q=site%3Atmtpost.com+%28AI+OR+%E7%A7%91%E6%8A%80%29&hl=zh-CN&gl=CN&ceid=CN:zh-Hans'],
   ['雷峰网·AI', 'https://www.leiphone.com/feed/categoryRss/name/ai', '人工智能', 'https://news.google.com/rss/search?q=site%3Aleiphone.com+%28AI+OR+%E4%BA%BA%E5%B7%A5%E6%99%BA%E8%83%BD%29&hl=zh-CN&gl=CN&ceid=CN:zh-Hans'],
   ['雷峰网·业界', 'https://www.leiphone.com/feed/categoryRss/name/industrynews', '产业与政策', 'https://news.google.com/rss/search?q=site%3Aleiphone.com+%E4%B8%9A%E7%95%8C&hl=zh-CN&gl=CN&ceid=CN:zh-Hans'],
-  ['爱范儿', 'https://www.ifanr.com/feed/', '互联网'],
+  ['爱范儿', 'https://www.ifanr.com/feed/', '互联网', 'https://news.google.com/rss/search?q=site%3Aifanr.com+%28AI+OR+%E7%A7%91%E6%8A%80%29&hl=zh-CN&gl=CN&ceid=CN:zh-Hans'],
   ['极客公园', 'https://www.geekpark.net/rss', '互联网', 'https://news.google.com/rss/search?q=site%3Ageekpark.net+%28AI+OR+%E7%A7%91%E6%8A%80%29&hl=zh-CN&gl=CN&ceid=CN:zh-Hans'],
-  ['IT之家', 'https://www.ithome.com/rss/', '其他科技'],
-  ['量子位', 'https://www.qbitai.com/feed', '人工智能']
+  ['IT之家', 'https://www.ithome.com/rss/', '其他科技', 'https://news.google.com/rss/search?q=site%3Aithome.com+%E7%A7%91%E6%8A%80&hl=zh-CN&gl=CN&ceid=CN:zh-Hans'],
+  ['量子位', 'https://www.qbitai.com/feed', '人工智能', 'https://news.google.com/rss/search?q=site%3Aqbitai.com+%28AI+OR+%E4%BA%BA%E5%B7%A5%E6%99%BA%E8%83%BD%29&hl=zh-CN&gl=CN&ceid=CN:zh-Hans']
 ];
 
 function decode(value = '') {
