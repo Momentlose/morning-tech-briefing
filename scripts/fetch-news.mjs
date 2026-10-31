@@ -68,6 +68,35 @@ function textOnly(html) {
   return decode(html).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
+const authorDesks = {
+  '36氪': '36氪编辑部',
+  '钛媒体': '钛媒体编辑部',
+  '雷峰网·AI': '雷峰网 AI 编辑部',
+  '雷峰网·业界': '雷峰网业界编辑部',
+  '爱范儿': '爱范儿编辑部',
+  '极客公园': '极客公园编辑部',
+  'IT之家': 'IT之家编辑部',
+  '量子位': '量子位编辑部',
+  '少数派热门文章': '少数派编辑部',
+  '知乎热榜': '知乎热榜',
+  '虎扑步行街热帖': '虎扑步行街'
+};
+
+function cleanAuthor(value = '') {
+  const text = textOnly(typeof value === 'string' ? value : '').replace(/^by\s+/i, '').trim();
+  if (!text) return '';
+  const bracketed = text.match(/^(.*?)\s*<[^>]+>\s*$/);
+  if (bracketed?.[1]?.trim()) return bracketed[1].trim();
+  const mailed = text.match(/^[^\s()]+@[^\s()]+\s*\((.*)\)\s*$/);
+  if (mailed?.[1]?.trim()) return mailed[1].trim();
+  return /^(用户|匿名用户|管理员|system|admin)$/i.test(text) ? '' : text;
+}
+
+function resolveAuthor(value, source) {
+  const author = cleanAuthor(value).slice(0, 30);
+  return author || authorDesks[source] || source || '综合编辑';
+}
+
 function toIsoDate(value, fallback = Date.now()) {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return new Date(value < 1e12 ? value * 1000 : value).toISOString();
@@ -92,6 +121,7 @@ async function fetchSspaiHot() {
       link: item.url || item.link || (item.id ? 'https://sspai.com/post/' + item.id : ''),
       date: toIsoDate(item.released_time || item.released_at || item.created_at || item.createdAt),
       source: label,
+      author: resolveAuthor(item.author?.nickname || item.author_name || item.nickname || (typeof item.author === 'string' ? item.author : ''), label),
       summary: textOnly(item.summary || item.description || '').slice(0, 220),
       cat: '社区热榜',
       popularity: Number(item.like_count || 0) * 1000 + Number(item.comment_count || 0)
@@ -135,6 +165,7 @@ async function fetchZhihuHot() {
           link,
           date: toIsoDate(target.created || item.created || item.updated_time),
           source: label,
+          author: resolveAuthor(target.author?.name || item.author?.name, label),
           summary: textOnly(target.excerpt || item.excerpt || item.detail_text || '').slice(0, 220),
           cat: '社区热榜'
         };
@@ -180,6 +211,7 @@ async function fetchHupuHot() {
       link,
       date: toIsoDate(rawDate, Date.now()),
       source: label,
+      author: resolveAuthor('', label),
       summary: textOnly(summaryMatch?.[1] || '').slice(0, 220),
       cat: '社区热榜'
     };
@@ -274,9 +306,10 @@ async function fetchFeed([label, url, cat, fallbackUrl]) {
         const link = field(item, 'link');
         const date = field(item, 'pubDate');
         const source = label;
+        const author = resolveAuthor(field(item, 'dc:creator') || field(item, 'author') || field(item, 'name') || field(item, 'source'), source);
         const summary = textOnly(field(item, 'description')).slice(0, 220);
         if (!title || !link || !date) return null;
-        return { title, link, date, source, summary, cat: cat === '社区热榜' ? cat : categoryFor(title, summary, cat) };
+        return { title, link, date, source, author, summary, cat: cat === '社区热榜' ? cat : categoryFor(title, summary, cat) };
       }).filter(Boolean).slice(0, 24);
       if (!items.length) throw new Error('no RSS items parsed');
       if (index > 0) console.warn(label + ': primary RSS unavailable; fallback feed succeeded.');
