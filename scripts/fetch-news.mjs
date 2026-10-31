@@ -1,12 +1,12 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 
 const feeds = [
-  ['36氪', 'https://36kr.com/feed', '产业与政策', 'https://news.google.com/rss/search?q=site%3A36kr.com+%28AI+OR+科技+OR+半导体+OR+互联网%29&hl=zh-CN&gl=CN&ceid=CN:zh-Hans'],
+  ['36氪', 'https://www.36kr.com/feed', '产业与政策', 'https://news.google.com/rss/search?q=site%3A36kr.com+%28AI+OR+%E7%A7%91%E6%8A%80+OR+%E5%8D%8A%E5%AF%BC%E4%BD%93+OR+%E4%BA%92%E8%81%94%E7%BD%91%29&hl=zh-CN&gl=CN&ceid=CN:zh-Hans'],
   ['钛媒体', 'https://www.tmtpost.com/feed', '产业与政策'],
-  ['雷峰网·AI', 'https://www.leiphone.com/feed/categoryRss/name/ai', '人工智能'],
-  ['雷峰网·业界', 'https://www.leiphone.com/feed/categoryRss/name/industrynews', '产业与政策'],
+  ['雷峰网·AI', 'https://www.leiphone.com/feed/categoryRss/name/ai', '人工智能', 'https://news.google.com/rss/search?q=site%3Aleiphone.com+%28AI+OR+%E4%BA%BA%E5%B7%A5%E6%99%BA%E8%83%BD%29&hl=zh-CN&gl=CN&ceid=CN:zh-Hans'],
+  ['雷峰网·业界', 'https://www.leiphone.com/feed/categoryRss/name/industrynews', '产业与政策', 'https://news.google.com/rss/search?q=site%3Aleiphone.com+%E4%B8%9A%E7%95%8C&hl=zh-CN&gl=CN&ceid=CN:zh-Hans'],
   ['爱范儿', 'https://www.ifanr.com/feed/', '互联网'],
-  ['极客公园', 'https://www.geekpark.net/rss', '互联网'],
+  ['极客公园', 'https://www.geekpark.net/rss', '互联网', 'https://news.google.com/rss/search?q=site%3Ageekpark.net+%28AI+OR+%E7%A7%91%E6%8A%80%29&hl=zh-CN&gl=CN&ceid=CN:zh-Hans'],
   ['IT之家', 'https://www.ithome.com/rss/', '其他科技'],
   ['量子位', 'https://www.qbitai.com/feed', '人工智能']
 ];
@@ -95,6 +95,11 @@ function cleanAuthor(value = '') {
 function resolveAuthor(value, source) {
   const author = cleanAuthor(value).slice(0, 30);
   return author || authorDesks[source] || source || '综合编辑';
+}
+
+function normalizeLink(value = '') {
+  const link = decode(String(value || '')).trim();
+  return /^http:\/\//i.test(link) ? link.replace(/^http:\/\//i, 'https://') : link;
 }
 
 function toIsoDate(value, fallback = Date.now()) {
@@ -298,7 +303,7 @@ async function fetchFeed([label, url, cat, fallbackUrl]) {
   const failures = [];
   for (const [index, feedUrl] of urls.entries()) {
     try {
-      const response = await fetch(feedUrl, { signal: AbortSignal.timeout(20000), headers: { 'user-agent': 'MorningTechBriefing/1.0 (RSS reader)' } });
+      const response = await fetch(feedUrl, { signal: AbortSignal.timeout(35000), headers: { 'user-agent': 'MorningTechBriefing/1.0 (RSS reader)' } });
       if (!response.ok) throw new Error('HTTP ' + response.status);
       const xml = await response.text();
       const items = [...xml.matchAll(/<item\b[\s\S]*?<\/item>/gi)].map(([item]) => {
@@ -325,13 +330,14 @@ async function fetchFeed([label, url, cat, fallbackUrl]) {
 const results = await Promise.allSettled([...feeds.map(fetchFeed), fetchSspaiHot(), fetchZhihuHot(), fetchHupuHot()]);
 const stories = [];
 const seen = new Set();
-const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+const cutoff = Date.now() - 48 * 60 * 60 * 1000;
 for (const result of results) {
   if (result.status !== 'fulfilled') {
     console.warn(result.reason?.message || 'RSS feed failed');
     continue;
   }
   for (const item of result.value) {
+    item.link = normalizeLink(item.link);
     const timestamp = Date.parse(item.date);
     if (!Number.isFinite(timestamp) || timestamp < cutoff || timestamp > Date.now() + 60 * 60 * 1000 || seen.has(item.link)) continue;
     if (!item.link.startsWith('https://')) continue;
@@ -341,13 +347,21 @@ for (const result of results) {
 }
 stories.sort((a, b) => Date.parse(b.date) - Date.parse(a.date));
 if (!stories.length) throw new Error('No recent stories were returned by the RSS sources.');
-const sourceCounts = new Map();
-const publishedStories = stories.filter(item => {
-  const count = sourceCounts.get(item.source) || 0;
-  if (count >= 15) return false;
-  sourceCounts.set(item.source, count + 1);
-  return true;
-}).slice(0, 75);
+const sourceQueues = new Map();
+for (const item of stories) {
+  if (!sourceQueues.has(item.source)) sourceQueues.set(item.source, []);
+  const queue = sourceQueues.get(item.source);
+  if (queue.length < 12) queue.push(item);
+}
+const publishedStories = [];
+const queues = [...sourceQueues.values()];
+while (publishedStories.length < 75 && queues.some(queue => queue.length)) {
+  for (const queue of queues) {
+    if (publishedStories.length >= 75) break;
+    if (queue.length) publishedStories.push(queue.shift());
+  }
+}
+publishedStories.sort((a, b) => Date.parse(b.date) - Date.parse(a.date));
 let translationCursor = 0;
 let translatedCount = 0;
 const translationWorkers = Array.from({ length: 3 }, async () => {
