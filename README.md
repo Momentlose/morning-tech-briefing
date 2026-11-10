@@ -27,6 +27,23 @@ https://momentlose.github.io/morning-tech-briefing/
 
 36氪官方 RSS 不可用时会回退到 Google News。此时标题链接可能先打开 Google News 页面；如果媒体未提供可用摘要，页面会明确提示预览不可用。社区榜单使用公开页面接口，结构可能随站点调整；抓取失败时会记录日志，并继续生成其他来源。
 
-## 发布
+## 本地开发
+
+需要 Node.js 22 或更新版本，无需安装第三方依赖。
+
+```powershell
+node scripts/fetch-news.mjs
+node scripts/serve.mjs
+```
+
+打开 http://127.0.0.1:4173 查看页面。抓取脚本需要联网，生成的 `data/` 不提交到仓库。`.local/` 用于临时截图和验证文件，也不提交。
+
+打开 http://127.0.0.1:4173/preview 使用可操作的 iPhone 14 Pro 手机外框预览。模拟屏幕为 393 × 852，扣除状态栏与底部手势区后，网页区域为 393 × 774。手机框会根据预览面板大小等比缩放，框内网页保持手机宽度。此预览使用当前浏览器引擎，不模拟 iOS Safari。
+
+手机端支持顶部固定的分类导航、关键词搜索和整页连续阅读；收藏保存在本机浏览器。搜索范围跟随当前分类，可匹配标题、摘要、来源和作者。
+
+## 发布方式
 
 推送到 main 分支会通过 GitHub Actions 更新 Pages。
+
+工作流先抓取新闻，再运行 `node scripts/build-site.mjs`，仅发布 `_site/` 下的首页、新闻数据及手机外框预览。线上手机预览入口：https://momentlose.github.io/morning-tech-briefing/preview/ 。
