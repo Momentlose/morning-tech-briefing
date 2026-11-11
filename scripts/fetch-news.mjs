@@ -1,4 +1,9 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+
+const targetPerSource = 20;
+const minimumPerSource = 15;
+const observedAt = new Date().toISOString();
+const huxiuFeed = ['虎嗅网', 'https://www.huxiu.com/rss/0.xml', '产业与政策', 'https://feedx.net/rss/huxiu.xml', 'https://news.google.com/rss/search?q=site%3Ahuxiu.com+when%3A30d&hl=zh-CN&gl=CN&ceid=CN:zh-Hans'];
 
 const feeds = [
   ['36氪', 'https://www.36kr.com/feed', '产业与政策', 'https://news.google.com/rss/search?q=site%3A36kr.com+%28AI+OR+%E7%A7%91%E6%8A%80+OR+%E5%8D%8A%E5%AF%BC%E4%BD%93+OR+%E4%BA%92%E8%81%94%E7%BD%91%29&hl=zh-CN&gl=CN&ceid=CN:zh-Hans'],
@@ -71,6 +76,8 @@ function textOnly(html) {
 }
 
 const authorDesks = {
+  '虎嗅网': '虎嗅编辑部',
+  'B站热榜': '哔哩哔哩',
   '36氪': '36氪编辑部',
   '钛媒体': '钛媒体编辑部',
   '雷峰网·AI': '雷峰网 AI 编辑部',
@@ -114,6 +121,7 @@ function toIsoDate(value, fallback = Date.now()) {
 
 async function fetchSspaiHot() {
   const label = '少数派热门文章';
+  const rss = [label, 'https://sspai.com/feed', '社区热榜', 'https://news.google.com/rss/search?q=site%3Asspai.com%2Fpost+when%3A30d&hl=zh-CN&gl=CN&ceid=CN:zh-Hans'];
   const endpoint = 'https://sspai.com/api/v1/article/index/page/get?limit=50&offset=0&created_at=0';
   try {
     const response = await fetch(endpoint, {
@@ -135,18 +143,26 @@ async function fetchSspaiHot() {
     })).filter(item => item.title && item.link.startsWith('https://sspai.com/'));
     items.sort((a, b) => b.popularity - a.popularity);
     if (!items.length) throw new Error('no usable articles returned');
-    return items.slice(0, 15).map(({ popularity, ...item }) => item);
+    const articles = uniqueStories(items.map(({ popularity, ...item }) => item));
+    if (articles.length >= targetPerSource) return articles;
+    try {
+      return uniqueStories([...articles, ...await fetchFeed(rss)]);
+    } catch (error) {
+      if (!articles.length) throw error;
+      console.warn(label + ': ' + error.message);
+      return articles;
+    }
   } catch (error) {
     console.warn(label + ': hot feed unavailable; falling back to the official RSS feed. ' + (error?.message || String(error)));
-    return fetchFeed([label, 'https://sspai.com/feed', '社区热榜']);
+    return fetchFeed(rss);
   }
 }
 
 async function fetchZhihuHot() {
   const label = '知乎热榜';
   const endpoints = [
-    'https://api.zhihu.com/topstory/hot-list?limit=30',
-    'https://www.zhihu.com/api/v3/feed/topstory/hot-lists/total?limit=30'
+    'https://api.zhihu.com/topstory/hot-list?limit=50',
+    'https://www.zhihu.com/api/v3/feed/topstory/hot-lists/total?limit=50'
   ];
   const failures = [];
   for (const endpoint of endpoints) {
@@ -162,7 +178,7 @@ async function fetchZhihuHot() {
       if (!response.ok) throw new Error('HTTP ' + response.status);
       const payload = await response.json();
       const rows = Array.isArray(payload.data) ? payload.data : Array.isArray(payload.data?.data) ? payload.data.data : [];
-      const items = rows.map(item => {
+      const items = rows.map((item, index) => {
         const target = item.target || item;
         const id = target.id || String(target.url || '').match(/questions?\/(\d+)/)?.[1];
         let link = target.url || item.url || (id ? 'https://www.zhihu.com/question/' + id : '');
@@ -171,12 +187,14 @@ async function fetchZhihuHot() {
           title: textOnly(target.title || item.title || ''),
           link,
           date: toIsoDate(target.created || item.created || item.updated_time),
+          observedAt,
+          rank: index + 1,
           source: label,
           author: resolveAuthor(target.author?.name || item.author?.name, label),
           summary: textOnly(target.excerpt || item.excerpt || item.detail_text || '').slice(0, 220),
           cat: '社区热榜'
         };
-      }).filter(item => item.title && item.link.startsWith('https://www.zhihu.com/')).slice(0, 15);
+      }).filter(item => item.title && item.link.startsWith('https://www.zhihu.com/'));
       if (!items.length) throw new Error('no usable hot topics returned');
       return items;
     } catch (error) {
@@ -206,7 +224,7 @@ async function fetchHupuHot() {
     if (!href || !title || title.length < 8) return null;
     let url;
     try { url = new URL(href, 'https://bbs.hupu.com'); } catch { return null; }
-    if (!/(^|\.)hupu\.com$/i.test(url.hostname) || !/^\/\d{6,}(?:\.html)?\/?$/.test(url.pathname)) return null;
+    if (url.hostname !== 'bbs.hupu.com' || !/^\/\d{6,}(?:\.html)?\/?$/.test(url.pathname)) return null;
     const link = url.href;
     if (seen.has(link)) return null;
     seen.add(link);
@@ -217,14 +235,87 @@ async function fetchHupuHot() {
       title,
       link,
       date: toIsoDate(rawDate, Date.now()),
+      observedAt,
+      rank: seen.size,
       source: label,
       author: resolveAuthor('', label),
       summary: textOnly(summaryMatch?.[1] || '').slice(0, 220),
       cat: '社区热榜'
     };
-  }).filter(Boolean).slice(0, 15);
+  }).filter(Boolean);
   if (!items.length) throw new Error(label + ': no hot threads parsed');
   return items;
+}
+
+async function fetchBilibiliHot() {
+  const source = 'B站热榜';
+  const endpoints = [
+    'https://api.bilibili.com/x/web-interface/ranking/v2?rid=0&type=all',
+    'https://api.bilibili.com/x/web-interface/popular?ps=50&pn=1'
+  ];
+  const failures = [];
+  for (const url of endpoints) {
+    try {
+      const response = await fetch(url, {
+        signal: AbortSignal.timeout(15000),
+        headers: { 'user-agent': 'Mozilla/5.0', referer: 'https://www.bilibili.com/', accept: 'application/json' }
+      });
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      const data = await response.json();
+      if (data.code !== 0 || !Array.isArray(data.data?.list)) throw new Error('API code ' + data.code);
+      const items = data.data.list.map((video, index) => ({
+        title: textOnly(video.title || ''),
+        link: /^BV[\da-zA-Z]{10}$/.test(video.bvid) ? 'https://www.bilibili.com/video/' + video.bvid + '/' : '',
+        date: toIsoDate(video.pubdate),
+        observedAt,
+        rank: index + 1,
+        source,
+        author: resolveAuthor(video.owner?.name, source),
+        summary: textOnly(video.desc || '').slice(0, 220),
+        cat: '社区热榜'
+      })).filter(item => item.title && item.link);
+      if (items.length) return items;
+      throw new Error('no ranked videos');
+    } catch (error) {
+      failures.push(error.message);
+    }
+  }
+  throw new Error(source + ': ' + failures.join('; '));
+}
+
+async function fetchHuxiu() {
+  const source = '虎嗅网';
+  const articles = [];
+  const fetchPage = async url => {
+    const response = await fetch(url, { signal: AbortSignal.timeout(12000), headers: { 'user-agent': 'Mozilla/5.0' } });
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    return response.text();
+  };
+  try {
+    const home = await fetchPage('https://www.huxiu.com/');
+    const links = [...new Set([...home.matchAll(/href="(?:https:\/\/www\.huxiu\.com)?(\/article\/\d+\.html)"/g)]
+      .map(([, path]) => 'https://www.huxiu.com' + path))].slice(0, 30);
+    for (let index = 0; index < links.length && articles.length < targetPerSource; index += 6) {
+      const batch = await Promise.allSettled(links.slice(index, index + 6).map(async link => {
+        const html = await fetchPage(link);
+        const meta = name => textOnly(html.match(new RegExp('<meta\\s+property="' + name + '"\\s+content="([^"]*)"', 'i'))?.[1] || '');
+        const title = meta('og:title');
+        const summary = meta('og:description').slice(0, 220);
+        return { title, link, date: meta('article:published_time'), source, author: authorDesks[source], summary, cat: categoryFor(title, summary, '产业与政策') };
+      }));
+      articles.push(...uniqueStories(batch.filter(result => result.status === 'fulfilled').map(result => result.value)));
+    }
+  } catch (error) {
+    console.warn(source + ': homepage unavailable: ' + error.message);
+  }
+  if (articles.length >= targetPerSource) return articles;
+  try {
+    return uniqueStories([...articles, ...await fetchFeed(huxiuFeed)]);
+  } catch (error) {
+    if (!articles.length) throw error;
+    console.warn(error.message);
+    return articles;
+  }
 }
 
 function impactFor(item) {
@@ -300,87 +391,118 @@ async function translateTitle(title) {
   }
   return title;
 }
-async function fetchFeed([label, url, cat, fallbackUrl]) {
-  const urls = [url, fallbackUrl].filter(Boolean);
+const maxAge = Date.now() - 30 * 24 * 60 * 60 * 1000;
+
+function storyTime(item) {
+  return Date.parse(item.observedAt || item.date);
+}
+
+function uniqueStories(items) {
+  const links = new Set();
+  const titles = new Set();
+  return items.filter(item => {
+    if (!item?.title || !item.link) return false;
+    item.link = normalizeLink(item.link);
+    const time = storyTime(item);
+    if (!item.link.startsWith('https://') || !Number.isFinite(time) || time < maxAge || time > Date.now() + 60 * 60 * 1000) return false;
+    const title = item.title.normalize('NFKC').toLowerCase().replace(/[\p{P}\p{Z}\s]/gu, '');
+    if (links.has(item.link) || titles.has(title)) return false;
+    links.add(item.link);
+    titles.add(title);
+    return true;
+  });
+}
+
+async function fetchFeed([label, url, cat, ...fallbackUrls]) {
+  const urls = [url, ...fallbackUrls].filter(Boolean);
   const failures = [];
+  let collected = [];
   for (const [index, feedUrl] of urls.entries()) {
     try {
       const response = await fetch(feedUrl, { signal: AbortSignal.timeout(35000), headers: { 'user-agent': 'MorningTechBriefing/1.0 (RSS reader)' } });
       if (!response.ok) throw new Error('HTTP ' + response.status);
       const xml = await response.text();
       const items = [...xml.matchAll(/<item\b[\s\S]*?<\/item>/gi)].map(([item]) => {
-        const title = textOnly(field(item, 'title'));
+        let title = textOnly(field(item, 'title'));
         const link = field(item, 'link');
+        const publisher = textOnly(field(item, 'source'));
+        if (publisher && link.startsWith('https://news.google.com/') && title.endsWith(' - ' + publisher)) {
+          title = title.slice(0, -(publisher.length + 3));
+        }
         const date = field(item, 'pubDate');
         const source = label;
         const author = resolveAuthor(field(item, 'dc:creator') || field(item, 'author') || field(item, 'name') || field(item, 'source'), source);
         const summary = textOnly(field(item, 'description')).slice(0, 220);
         if (!title || !link || !date) return null;
         return { title, link, date, source, author, summary, cat: cat === '社区热榜' ? cat : categoryFor(title, summary, cat) };
-      }).filter(Boolean).slice(0, 24);
+      }).filter(Boolean);
       if (!items.length) throw new Error('no RSS items parsed');
-      if (index > 0) console.warn(label + ': primary RSS unavailable; fallback feed succeeded.');
-      return items;
+      collected = uniqueStories([...collected, ...items]);
+      if (index > 0) console.log(label + ': supplemental feed returned ' + items.length + ' items.');
+      if (collected.length >= targetPerSource) return collected;
     } catch (error) {
       failures.push(error?.message || String(error));
       if (index < urls.length - 1) console.warn(label + ': primary RSS failed; trying fallback feed.');
     }
   }
+  if (collected.length) return collected;
   throw new Error(label + ': ' + failures.join('; '));
 }
 
-const results = await Promise.allSettled([...feeds.map(fetchFeed), fetchSspaiHot(), fetchZhihuHot(), fetchHupuHot()]);
-const stories = [];
-const seen = new Set();
-const cutoff = Date.now() - 48 * 60 * 60 * 1000;
-const maxAge = Date.now() - 7 * 24 * 60 * 60 * 1000;
-const quietFallbacks = new Map();
-for (const result of results) {
-  if (result.status !== 'fulfilled') {
-    console.warn(result.reason?.message || 'RSS feed failed');
-    continue;
-  }
-  for (const item of result.value) {
-    item.link = normalizeLink(item.link);
-    const timestamp = Date.parse(item.date);
-    if (!Number.isFinite(timestamp) || timestamp < maxAge || timestamp > Date.now() + 60 * 60 * 1000 || seen.has(item.link)) continue;
-    if (!item.link.startsWith('https://')) continue;
-    seen.add(item.link);
-    if (timestamp >= cutoff) {
-      stories.push(item);
-    } else {
-      const previous = quietFallbacks.get(item.source);
-      if (!previous || timestamp > Date.parse(previous.date)) quietFallbacks.set(item.source, item);
+async function readPreviousNews() {
+  try {
+    const data = JSON.parse(await readFile('data/news.json', 'utf8'));
+    if (Array.isArray(data.items)) return data.items;
+  } catch {}
+  try {
+    const response = await fetch('https://momentlose.github.io/morning-tech-briefing/data/news.json', { signal: AbortSignal.timeout(10000) });
+    if (response.ok) {
+      const data = await response.json();
+      if (Array.isArray(data.items)) return data.items;
     }
+  } catch (error) {
+    console.warn('Previous edition unavailable: ' + error.message);
   }
+  return [];
 }
-const freshSources = new Set(stories.map(item => item.source));
-for (const [source, item] of quietFallbacks) {
-  if (!freshSources.has(source)) stories.push(item);
-}
-stories.sort((a, b) => Date.parse(b.date) - Date.parse(a.date));
-if (!stories.length) throw new Error('No recent stories were returned by the RSS sources.');
-const sourceQueues = new Map();
-for (const item of stories) {
-  if (!sourceQueues.has(item.source)) sourceQueues.set(item.source, []);
-  const queue = sourceQueues.get(item.source);
-  if (queue.length < 12) queue.push(item);
-}
+
+const sources = [
+  ...feeds.map(feed => [feed[0], () => fetchFeed(feed)]),
+  ['虎嗅网', fetchHuxiu],
+  ['少数派热门文章', fetchSspaiHot], ['知乎热榜', fetchZhihuHot],
+  ['虎扑步行街热帖', fetchHupuHot], ['B站热榜', fetchBilibiliHot]
+];
+const [results, previous] = await Promise.all([
+  Promise.allSettled(sources.map(([, fetchSource]) => fetchSource())),
+  readPreviousNews()
+]);
+const previousByLink = new Map(previous.map(item => [item.link, item]));
 const publishedStories = [];
-const queues = [...sourceQueues.values()];
-while (publishedStories.length < 75 && queues.some(queue => queue.length)) {
-  for (const queue of queues) {
-    if (publishedStories.length >= 75) break;
-    if (queue.length) publishedStories.push(queue.shift());
-  }
+for (const [index, [source]] of sources.entries()) {
+  const result = results[index];
+  const live = result.status === 'fulfilled' ? result.value : [];
+  if (result.status === 'rejected') console.warn(result.reason?.message || source + ': feed failed');
+  const items = uniqueStories([...live, ...previous.filter(item => item.source === source)])
+    .sort((a, b) => {
+      if (source === '虎嗅网') {
+        const direct = item => item.link.startsWith('https://www.huxiu.com/article/');
+        if (direct(a) !== direct(b)) return direct(a) ? -1 : 1;
+      }
+      return storyTime(b) - storyTime(a) || (a.rank ?? Infinity) - (b.rank ?? Infinity);
+    })
+    .slice(0, targetPerSource);
+  if (items.length < minimumPerSource) console.warn(source + ': only ' + items.length + ' eligible items');
+  else console.log(source + ': ' + items.length + ' items');
+  publishedStories.push(...items);
 }
-publishedStories.sort((a, b) => Date.parse(b.date) - Date.parse(a.date));
+if (!publishedStories.length) throw new Error('No stories were returned by the sources.');
+publishedStories.sort((a, b) => storyTime(b) - storyTime(a));
 let translationCursor = 0;
 let translatedCount = 0;
 const translationWorkers = Array.from({ length: 3 }, async () => {
   while (translationCursor < publishedStories.length) {
     const item = publishedStories[translationCursor++];
-    item.titleZh = await translateTitle(item.title);
+    item.titleZh = previousByLink.get(item.link)?.titleZh || await translateTitle(item.title);
     if (item.titleZh !== item.title) translatedCount++;
     item.impact = impactFor(item);
   }
@@ -393,7 +515,9 @@ const previewWorkers = Array.from({ length: 6 }, async () => {
   while (previewCursor < publishedStories.length) {
     const item = publishedStories[previewCursor++];
     const rssSummary = item.summary;
-    item.summary = await fetchArticlePreview(item);
+    const previousSummary = previousByLink.get(item.link)?.summary;
+    if (previousSummary?.length > item.summary.length) item.summary = previousSummary;
+    if (!item.rank && item.summary.length < 35) item.summary = await fetchArticlePreview(item);
     if (item.summary && item.summary !== rssSummary) extractedPreviewCount++;
   }
 });

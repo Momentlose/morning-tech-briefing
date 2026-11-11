@@ -7,6 +7,7 @@ const routes = new Map([
   ['/', ['index.html', 'text/html; charset=utf-8']],
   ['/index.html', ['index.html', 'text/html; charset=utf-8']],
   ['/preview', ['scripts/phone-preview.html', 'text/html; charset=utf-8']],
+  ['/scripts/reading-order.js', ['scripts/reading-order.js', 'text/javascript; charset=utf-8']],
   ['/data/news.json', ['data/news.json', 'application/json; charset=utf-8']]
 ]);
 

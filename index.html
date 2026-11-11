@@ -57,6 +57,27 @@ button:disabled{cursor:wait;opacity:.55}
 .sectionhead{gap:12px;flex-wrap:wrap}.sectionhead span{font-size:12px}
 .toast{position:fixed;bottom:calc(90px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);z-index:150;background:var(--ink);color:#fff;padding:11px 18px;border-radius:12px;font-size:14px;max-width:calc(100% - 32px);text-align:center;pointer-events:none}
 .toast:empty{display:none}
+.group-tools{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+.group-tools .group-hint{margin:0}
+.order-entry{border:0;background:transparent;color:var(--green);font-size:12px;font-weight:700;min-height:44px;padding:0 8px;white-space:nowrap}
+.source-content>.order-entry{display:block;margin-left:auto}
+.source-group summary,.story-title-link{-webkit-touch-callout:none}
+.order-dialog{width:min(460px,calc(100% - 24px));max-height:calc(100dvh - 24px);border:1px solid var(--line);border-radius:18px;padding:0;color:var(--ink);background:var(--card)}
+.order-dialog::backdrop{background:#18211d88}
+.order-dialog header,.order-dialog footer{padding:14px 16px}
+.order-dialog h2{font-size:17px;margin:0}
+.order-dialog p{color:var(--muted);font-size:13px;margin:4px 0 0}
+.order-list{list-style:none;margin:0;padding:4px 12px;max-height:min(52dvh,420px);overflow:auto;overscroll-behavior:contain;overflow-anchor:none}
+.order-list li{display:flex;align-items:center;gap:4px;min-height:56px;padding:3px;background:var(--bg);border:1px solid var(--line);border-radius:10px;margin-bottom:6px}
+.order-list .order-selected{border-color:var(--green)}
+.order-list .order-dragging{background:var(--mint);border-color:var(--green)}
+.order-label{flex:1;min-width:0;font-size:13px;overflow-wrap:anywhere}
+.order-handle{display:grid;place-items:center;flex:0 0 40px;min-height:44px;font-size:25px;color:var(--green);cursor:grab;touch-action:none;user-select:none}
+.order-dragging .order-handle{cursor:grabbing}
+.order-list button,.order-dialog footer button{min-height:44px;border:0;border-radius:8px;padding:0 9px;background:var(--mint);color:var(--green);font-size:12px;font-weight:700}
+.order-list button{min-width:33px}
+.order-dialog footer{display:flex;justify-content:flex-end;gap:8px;border-top:1px solid var(--line)}
+.order-dialog footer button[data-save-order]{background:var(--green);color:white;padding-inline:16px}
 .scroll-reveal .reveal-target{opacity:1;transform:none;transition:none}
 @media(max-width:619px){
  .shell{padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env(safe-area-inset-right))}
@@ -91,6 +112,12 @@ button:disabled{cursor:wait;opacity:.55}
 </main>
 <div class="bottom"><div class="bottomin"><div><strong>早间阅读</strong><small id="updated">打开页面即可刷新</small></div><div class="actions"><button class="share" id="shareBtn">分享</button><button class="refresh" id="refreshBtn">刷新 ↻</button></div></div></div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
+<dialog class="order-dialog" id="readingOrderDialog" aria-labelledby="readingOrderTitle">
+ <header><h2 id="readingOrderTitle">调整阅读顺序</h2><p>按住左侧把手上下拖动，也可以点置顶或箭头。</p></header>
+ <ol class="order-list" aria-label="阅读顺序"></ol>
+ <form method="dialog"><footer><button type="submit">取消</button><button type="button" data-save-order>保存顺序</button></footer></form>
+</dialog>
+<script src="./scripts/reading-order.js"></script>
 <script>
 const FEEDS=[
 ['科技新闻','https://news.google.com/rss/search?q=科技+AI&hl=zh-CN&gl=CN&ceid=CN:zh-Hans','产业与政策'],
@@ -165,14 +192,14 @@ function render(){
  if(!list.length){$('#stories').innerHTML='<div class="state">'+(query?'没有匹配的资讯，试试其他关键词或清除搜索。':category==='我的收藏'?'还没有收藏新闻，点每条新闻旁的星标即可保存。':'暂时没有获取到资讯。稍后可再试，或检查网络连接。')+'</div>';updateSnapRail();return}
  const groups=new Map();
  list.forEach((story,index)=>{const name=story.source||'其他来源';if(!groups.has(name))groups.set(name,[]);groups.get(name).push({story,index})});
- $('#stories').innerHTML='<p class="group-hint">按信息源分组 · 点开媒体名称继续阅读</p><div class="source-groups">'+Array.from(groups,([name,items])=>'<details class="source-group"><summary><span class="source-heading"><span class="source-name">'+esc(name)+'</span><span class="source-count">'+items.length+' 篇</span></span><span class="source-chevron" aria-hidden="true">⌄</span></summary><div class="source-content">'+items.map(({story:x,index:i})=>{
+ $('#stories').innerHTML='<div class="group-tools"><p class="group-hint">长按来源或新闻可调整顺序</p><button class="order-entry" type="button" data-order="sources">来源排序</button></div><div class="source-groups">'+Array.from(readingOrder.ordered(groups,null,entry=>entry[0]),([name,items])=>'<details class="source-group"><summary><span class="source-heading"><span class="source-name">'+esc(name)+'</span><span class="source-count">'+items.length+' 篇</span></span><span class="source-chevron" aria-hidden="true">⌄</span></summary><div class="source-content"><button class="order-entry" type="button" data-order="articles">新闻排序</button>'+readingOrder.ordered(items,name,entry=>entry.story.link).map(({story:x,index:i})=>{
   const impact=x.impact||{positive:'若报道所述变化转化为新增需求或收入，相关公司及上下游可能受益。',negative:'执行成本、竞争和预期落差可能使相关公司的利润或估值承压。',watch:'先确认报道涉及的公司、业务环节，再核对财报、订单和现金流。'};
   const title=x.titleZh||x.title;
   const original=/[A-Za-z]/.test(x.title)&&title!==x.title?'<div class="original-title">原文标题：'+esc(x.title)+'</div>':'';
   const isFavorite=favorites.some(item=>item.link===x.link);
   const preview=x.summaryZh||x.summary||'暂未生成内容预览，点击标题查看报道原文。';
   const author=x.author||x.source||'综合编辑';
-  return '<article class="story reveal-target"><div class="tags"><span class="tag '+(x.cat==='网络安全'?'risk':'')+'">'+esc(x.cat)+'</span><span class="tag">'+(title!==x.title?'机器翻译':'中文标题')+'</span><span class="tag author">资讯员 · '+esc(author)+'</span></div><h3><a class="story-title-link" href="'+esc(x.link)+'" target="_blank" rel="noopener noreferrer">'+esc(title)+' <span aria-hidden="true">↗</span></a></h3>'+original+'<p class="story-preview">'+esc(preview)+'</p><div class="meta"><span>'+esc(x.source)+'</span><span>'+age(x.date)+'</span></div><div class="story-actions"><button class="favorite-toggle '+(isFavorite?'is-favorite':'')+'" type="button" aria-pressed="'+isFavorite+'" data-favorite="'+i+'">'+(isFavorite?'★ 已收藏':'☆ 收藏')+'</button><button class="analysis-toggle" type="button" aria-expanded="false" data-analysis="'+i+'">查看影响分析</button></div><div class="analysis-panel" id="analysis-'+i+'" hidden><div class="analysis-row"><strong>潜在利好</strong>'+esc(impact.positive)+'</div><div class="analysis-row negative"><strong>潜在压力</strong>'+esc(impact.negative)+'</div><div class="analysis-row"><strong>研究时关注</strong>'+esc(impact.watch)+'</div><p class="analysis-note">自动整理的行业研究线索，不了解你的持仓情况，也不构成个人投资建议。</p></div></article>'
+  return '<article class="story reveal-target" data-link="'+esc(x.link)+'"><div class="tags"><span class="tag '+(x.cat==='网络安全'?'risk':'')+'">'+esc(x.cat)+'</span><span class="tag">'+(title!==x.title?'机器翻译':'中文标题')+'</span><span class="tag author">资讯员 · '+esc(author)+'</span></div><h3><a class="story-title-link" href="'+esc(x.link)+'" target="_blank" rel="noopener noreferrer">'+esc(title)+' <span aria-hidden="true">↗</span></a></h3>'+original+'<p class="story-preview">'+esc(preview)+'</p><div class="meta"><span>'+esc(x.source)+'</span><span>'+age(x.date)+'</span></div><div class="story-actions"><button class="favorite-toggle '+(isFavorite?'is-favorite':'')+'" type="button" aria-pressed="'+isFavorite+'" data-favorite="'+i+'">'+(isFavorite?'★ 已收藏':'☆ 收藏')+'</button><button class="analysis-toggle" type="button" aria-expanded="false" data-analysis="'+i+'">查看影响分析</button></div><div class="analysis-panel" id="analysis-'+i+'" hidden><div class="analysis-row"><strong>潜在利好</strong>'+esc(impact.positive)+'</div><div class="analysis-row negative"><strong>潜在压力</strong>'+esc(impact.negative)+'</div><div class="analysis-row"><strong>研究时关注</strong>'+esc(impact.watch)+'</div><p class="analysis-note">自动整理的行业研究线索，不了解你的持仓情况，也不构成个人投资建议。</p></div></article>'
  }).join('')+'</div></details>').join('')+'</div>';
  $('#stories').querySelectorAll('.favorite-toggle').forEach(button=>button.addEventListener('click',()=>{
   const story=list[Number(button.dataset.favorite)];
@@ -192,7 +219,8 @@ function render(){
   const panel=$('#analysis-'+button.dataset.analysis);panel.hidden=!panel.hidden;button.textContent=panel.hidden?'查看影响分析':'收起分析';button.setAttribute('aria-expanded',String(!panel.hidden))
  }));
  $('#stories').querySelectorAll('.source-group').forEach(group=>{
-  group.open=!!query||openSources.has(group.querySelector('.source-name').textContent);
+  group.dataset.source=group.querySelector('.source-name').textContent;
+  group.open=!!query||openSources.has(group.dataset.source);
   const summary=group.querySelector('summary');
   summary.addEventListener('click',event=>{
    event.preventDefault();
@@ -221,7 +249,7 @@ async function load(){
   const payload=await res.json();
   const items=Array.isArray(payload.items)?payload.items.filter(x=>x&&x.title&&/^https?:\/\//i.test(x.link)):[];
   if(!items.length)throw Error('empty');
-  allStories=items.sort((a,b)=>new Date(b.date)-new Date(a.date));
+  allStories=items;
   render();
   const timestamp=new Date(payload.generatedAt);
   const stamp=Number.isFinite(timestamp.getTime())?new Intl.DateTimeFormat('zh-CN',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}).format(timestamp):'';
@@ -250,5 +278,6 @@ $('#search').addEventListener('input',render);
 window.addEventListener('storage',event=>{if(event.key===FAVORITES_KEY)render()});
 $('#refreshBtn').addEventListener('click',load);$('#refreshTop').addEventListener('click',load);
 $('#shareBtn').addEventListener('click',async()=>{try{if(navigator.share)await navigator.share({title:'早间科技情报',text:'每日科技与 AI 资讯速览',url:location.href});else{await navigator.clipboard.writeText(location.href);notify('链接已复制')}}catch(error){if(error.name!=='AbortError')notify('分享失败，请从浏览器地址栏复制链接。')}});
+const readingOrder=setupReadingOrder({getStories:()=>[...allStories,...readFavorites()],onChange:render,notify});
 load();
 </script></body></html>
