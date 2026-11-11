@@ -61,23 +61,23 @@ button:disabled{cursor:wait;opacity:.55}
 .group-tools .group-hint{margin:0}
 .order-entry{border:0;background:transparent;color:var(--green);font-size:12px;font-weight:700;min-height:44px;padding:0 8px;white-space:nowrap}
 .source-content>.order-entry{display:block;margin-left:auto}
-.source-group summary,.story-title-link{-webkit-touch-callout:none}
-.order-dialog{width:min(460px,calc(100% - 24px));max-height:calc(100dvh - 24px);border:1px solid var(--line);border-radius:18px;padding:0;color:var(--ink);background:var(--card)}
-.order-dialog::backdrop{background:#18211d88}
-.order-dialog header,.order-dialog footer{padding:14px 16px}
-.order-dialog h2{font-size:17px;margin:0}
-.order-dialog p{color:var(--muted);font-size:13px;margin:4px 0 0}
-.order-list{list-style:none;margin:0;padding:4px 12px;max-height:min(52dvh,420px);overflow:auto;overscroll-behavior:contain;overflow-anchor:none}
-.order-list li{display:flex;align-items:center;gap:4px;min-height:56px;padding:3px;background:var(--bg);border:1px solid var(--line);border-radius:10px;margin-bottom:6px}
-.order-list .order-selected{border-color:var(--green)}
-.order-list .order-dragging{background:var(--mint);border-color:var(--green)}
-.order-label{flex:1;min-width:0;font-size:13px;overflow-wrap:anywhere}
-.order-handle{display:grid;place-items:center;flex:0 0 40px;min-height:44px;font-size:25px;color:var(--green);cursor:grab;touch-action:none;user-select:none}
-.order-dragging .order-handle{cursor:grabbing}
-.order-list button,.order-dialog footer button{min-height:44px;border:0;border-radius:8px;padding:0 9px;background:var(--mint);color:var(--green);font-size:12px;font-weight:700}
-.order-list button{min-width:33px}
-.order-dialog footer{display:flex;justify-content:flex-end;gap:8px;border-top:1px solid var(--line)}
-.order-dialog footer button[data-save-order]{background:var(--green);color:white;padding-inline:16px}
+.source-group summary,.story{-webkit-touch-callout:none}
+.source-groups,.source-content{position:relative}
+.is-ordering>.source-group>.source-content{display:none}
+.is-ordering>.source-group>summary{position:relative;top:auto;border-radius:15px;box-shadow:none}
+.is-ordering>.source-group>summary,.is-ordering>.story{cursor:grab;touch-action:none;user-select:none}
+.is-ordering>.source-group:not(.order-slot),.is-ordering>.story:not(.order-slot){animation:order-wiggle .36s ease-in-out infinite}
+.is-ordering>:nth-child(even){animation-delay:-.18s!important}
+@keyframes order-wiggle{0%,100%{rotate:-.55deg}50%{rotate:.55deg}}
+.is-ordering>.source-group .source-chevron{transform:none}
+.is-ordering .source-chevron{font-size:0}
+.is-ordering .source-chevron::before{content:'⠿';font-size:17px}
+.order-entry[aria-pressed=true]{background:var(--mint);border-radius:9px}
+.order-slot{background:var(--mint);border:1px dashed #7fa793;box-shadow:none!important}
+.order-slot>*{visibility:hidden}
+.order-lift{position:fixed;z-index:70;pointer-events:none;margin:0;transition:none;box-shadow:0 10px 26px #18211d35!important}
+.order-lift summary{height:100%}
+body:has(#stories.is-reordering) .snap-rail{visibility:hidden}
 .scroll-reveal .reveal-target{opacity:1;transform:none;transition:none}
 @media(max-width:619px){
  .shell{padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env(safe-area-inset-right))}
@@ -112,12 +112,7 @@ button:disabled{cursor:wait;opacity:.55}
 </main>
 <div class="bottom"><div class="bottomin"><div><strong>早间阅读</strong><small id="updated">打开页面即可刷新</small></div><div class="actions"><button class="share" id="shareBtn">分享</button><button class="refresh" id="refreshBtn">刷新 ↻</button></div></div></div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
-<dialog class="order-dialog" id="readingOrderDialog" aria-labelledby="readingOrderTitle">
- <header><h2 id="readingOrderTitle">调整阅读顺序</h2><p>按住左侧把手上下拖动，也可以点置顶或箭头。</p></header>
- <ol class="order-list" aria-label="阅读顺序"></ol>
- <form method="dialog"><footer><button type="submit">取消</button><button type="button" data-save-order>保存顺序</button></footer></form>
-</dialog>
-<script src="./scripts/reading-order.js"></script>
+<script src="./scripts/reading-order.js?v=inline-order"></script>
 <script>
 const FEEDS=[
 ['科技新闻','https://news.google.com/rss/search?q=科技+AI&hl=zh-CN&gl=CN&ceid=CN:zh-Hans','产业与政策'],
@@ -182,6 +177,7 @@ snapRail.addEventListener('pointerup',endSnapDrag);
 snapRail.addEventListener('pointercancel',endSnapDrag);
 updateSnapRail();
 function render(){
+ readingOrder.cancel();
  const openSources=new Set([...document.querySelectorAll('.source-group[open] .source-name')].map(el=>el.textContent));
  const favorites=readFavorites();
  $('#favoriteCount').textContent=String(favorites.length);
